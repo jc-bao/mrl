@@ -10,6 +10,7 @@ import os
 import gym
 import numpy as np
 import torch
+import panda_gym
 
 config = best_slide_config()
 config.alg = 'ddpg'
