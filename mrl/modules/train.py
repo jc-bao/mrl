@@ -42,7 +42,7 @@ class StandardTrain(mrl.Module):
         self.reset_idxs = []
 
       state, experience = debug_vectorized_experience(state, action, next_state, reward, done, info)
-      self.process_experience(experience)
+      self.process_experience(experience) # save experience
 
       if render:
         time.sleep(0.02)
@@ -51,7 +51,7 @@ class StandardTrain(mrl.Module):
       for _ in range(env.num_envs):
         self.env_steps += 1
         if self.env_steps % self.optimize_every == 0 and not dont_optimize:
-          self.optimize()
+          self.optimize() # relabel + update
     
     # If using MEP prioritized replay, fit the density model
     if self.config.prioritized_mode == 'mep':
