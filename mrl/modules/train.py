@@ -11,6 +11,7 @@ class StandardTrain(mrl.Module):
   def _setup(self):
     assert hasattr(self.config, 'optimize_every')
     self.optimize_every = self.config.optimize_every
+    self.optimize_times = self.config.optimize_times
     self.env_steps = 0
     self.reset_idxs = []
 
@@ -51,7 +52,8 @@ class StandardTrain(mrl.Module):
       for _ in range(env.num_envs):
         self.env_steps += 1
         if self.env_steps % self.optimize_every == 0 and not dont_optimize:
-          self.optimize() # relabel + update
+          for _ in range(self.optimize_times):
+            self.optimize() # relabel + update
     
     # If using MEP prioritized replay, fit the density model
     if self.config.prioritized_mode == 'mep':

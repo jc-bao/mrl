@@ -11,6 +11,7 @@ default_ddpg_config = lambda: AnnotatedAttrDict(
     action_l2_regularization=(1e-2, 'l2 penalty for action norm'),
     critic_weight_decay=(0., 'weight decay to apply to critic'),
     optimize_every=(2, 'how often optimize is called, in terms of environment steps'),
+    optimize_times=(1, 'how many times to update per optimize call'),
     batch_size=(2000, 'batch size for training the actors/critics'),
     warm_up=(10000, 'minimum steps in replay buffer needed to optimize'),  
     initial_explore=(10000, 'steps that actor acts randomly for at beginning of training'), 
