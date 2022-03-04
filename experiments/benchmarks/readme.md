@@ -24,8 +24,16 @@
   
 - [ ] Update Barch Size
   - [ ] 1000 batch 0.5 Hz
+  
   - [ ] 100000 batch 0.05Hz
+  
   - [ ] 1000000 batch 0.005Hz
+  
+    <img src="https://tva1.sinaimg.cn/large/e6c9d24ely1gzxjiyba47j21860nuq7b.jpg" alt="image-20220304082331118" style="zoom:25%;" />
+  
+    <img src="https://tva1.sinaimg.cn/large/e6c9d24ely1gzxjjs5zjij21ca0jyjud.jpg" alt="image-20220304082419387" style="zoom:25%;" />
+  
+    
 ## Tricks
 
 1. clip target network

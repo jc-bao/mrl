@@ -43,7 +43,7 @@ class StandardTrain(mrl.Module):
         self.reset_idxs = []
 
       state, experience = debug_vectorized_experience(state, action, next_state, reward, done, info)
-      self.process_experience(experience) # save experience
+      self.process_experience(experience) # save experience and score goals
 
       if render:
         time.sleep(0.02)

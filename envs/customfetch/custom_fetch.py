@@ -549,6 +549,11 @@ class SlideEnv(FetchSlideEnv):
 
 
 class PickPlaceEnv(FetchPickAndPlaceEnv):
+  ''' Modifided pick and place env
+  Modify points:
+  1. 
+  2. 
+  '''
   def __init__(self,
                max_step=51,
                internal_goal=GoalType.OBJ,

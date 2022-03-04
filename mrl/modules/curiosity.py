@@ -21,14 +21,12 @@ def generate_overshooting_goals(num_proposals, step_amount, direct_overshoots, b
 
 class AchievedGoalCuriosity(mrl.Module):
   """
-    For goal agents only. This module assumes the replay buffer maintains an achieved goal buffer;
-    To decide on goals to pursue during exploration, the module samples goals from the achieved goal
-    buffer, and chooses the highest scoring (see below) viable (per q-function) goal.  
+    Rank goal by Q
   """
-  def __init__(self, num_sampled_ags=500, max_steps=50, keep_dg_percent=-1e-1, randomize=False, use_qcutoff=True):
-    super().__init__('ag_curiosity',
-                     required_agent_modules=['env', 'replay_buffer', 'actor', 'critic'],
-                     locals=locals())
+  def __init__(self, num_sampled_ags=500, max_steps=50, keep_dg_percent=-1e-1, \
+    randomize=False, use_qcutoff=True):
+    super().__init__('ag_curiosity', \
+      required_agent_modules=['env', 'replay_buffer', 'actor', 'critic'], locals=locals())
     self.num_sampled_ags = num_sampled_ags
     self.max_steps = max_steps  #TODO: have this be learned from past trajectories?
     self.keep_dg_percent = keep_dg_percent
@@ -112,22 +110,24 @@ class AchievedGoalCuriosity(mrl.Module):
       self.replaced_goal[idx] = 1.
 
   def _process_experience(self, experience):
-    """Curiosity module updates the desired goal depending on experience.trajectory_over"""
+    """
+    experience -> score goals -> sample goals -> self.current_goals (behavior goal)
+    call every env steps
+    """
+    # init cases
     ag_buffer = self.replay_buffer.buffer.BUFF.buffer_ag
-
     if self.current_goals is None:
       self.current_goals = experience.reset_state['desired_goal']
 
-    computed_reward = self.env.compute_reward(experience.next_state['achieved_goal'], self.current_goals, 
-      {'s':experience.state['observation'], 'ns':experience.next_state['observation']})
+    computed_reward = self.env.compute_reward(experience.next_state['achieved_goal'], \
+      self.current_goals, {'s':experience.state['observation'], \
+        'ns':experience.next_state['observation']})
     close = computed_reward > -0.5
 
     # First, manage the episode resets & any special behavior that occurs on goal achievement, like go explore / resets / overshooting
     reset_idxs, overshooting_idxs, overshooting_proposals = self._manage_resets_and_success_behaviors(experience, close)
-
     if reset_idxs:
       self.train.reset_next(reset_idxs)
-
     if overshooting_idxs and len(ag_buffer):
       self._overshoot_goals(experience, overshooting_idxs, overshooting_proposals)
 
@@ -234,18 +234,18 @@ class AchievedGoalCuriosity(mrl.Module):
     return self.numpy(self.critic(states, max_actions))
 
   def relabel_state(self, state):
-    """Should be called by the policy module to relabel states with intrinsic goals"""
+    """Key method: propose goal to explore"""
     if self.current_goals is None:
       return state
 
     return {
         'observation': state['observation'],
         'achieved_goal': state['achieved_goal'],
-        'desired_goal': self.current_goals
+        'desired_goal': self.current_goals # maintained by process_experience
     }
 
   def score_goals(self, sampled_ags, info):
-    """ Lower is better """
+    """ compute goal score """
     raise NotImplementedError  # SUBCLASS THIS!
 
   def save(self, save_folder):
@@ -390,11 +390,11 @@ class EntropyGainScoringGoalCuriosity(AchievedGoalCuriosity):
     candidate_bgs_score = self.bg_kde.evaluate_log_density(
         candidate_bgs_repeat.reshape(num_envs * num_sampled_ags * num_ags, -1))
     candidate_bgs_score = candidate_bgs_score.reshape(num_envs * num_sampled_ags, num_ags)  # these are log densities
-    cond_candidate_score = joint_candidate_score - candidate_bgs_score
+    cond_candidate_score = joint_candidate_score - candidate_bgs_score # entropy gain
     cond_candidate_score = softmax(cond_candidate_score, axis=1)
 
     # Compute entropy gain for the predicted achieved goal
-    beta = 1 / len(self.replay_buffer.buffer)
+    beta = 1 / len(self.replay_buffer.buffer) # when buffer is small, small probability ag is enouraged
     sampled_ag_entr_new = self.ag_kde.evaluate_elementwise_entropy(candidate_bgs, beta=beta)
     sampled_ag_entr_old = self.ag_kde.evaluate_elementwise_entropy(candidate_bgs, beta=0.)
     sampled_ag_entr_gain = sampled_ag_entr_new - sampled_ag_entr_old

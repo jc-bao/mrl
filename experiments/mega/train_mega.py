@@ -179,8 +179,10 @@ def main(args):
     res = np.mean(agent.eval(num_episodes=30).rewards)
     agent.logger.log_color('Initial test reward (30 eps):', '{:.2f}'.format(res))
 
+    # main loop
     for epoch in range(int(args.max_steps // args.epoch_len)):
       t = time.time()
+      # train
       agent.train(num_steps=args.epoch_len)
 
       # VIZUALIZE GOALS
@@ -191,7 +193,7 @@ def main(args):
         agent.logger.add_embedding('last_ags', ag_buffer.get_batch(last_idxs))
         agent.logger.add_embedding('last_bgs', bg_buffer.get_batch(last_idxs))
 
-      # EVALUATE
+      # eval
       res = np.mean(agent.eval(num_episodes=30).rewards)
       agent.logger.log_color('Test reward (30 eps):', '{:.2f}'.format(res))
       agent.logger.log_color('Epoch time:', '{:.2f}'.format(time.time() - t), color='yellow')

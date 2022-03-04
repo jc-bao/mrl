@@ -23,23 +23,19 @@ class ActorPolicy(mrl.Module):
   def __call__(self, state, greedy=False):
     action_scale = self.env.max_action
 
-    # initial exploration and intrinsic curiosity
-    res = None
+    # relabel state
     if self.training:
       if self.config.get('initial_explore') and len(self.replay_buffer) < self.config.initial_explore:
         res = np.array([self.env.action_space.sample() for _ in range(self.env.num_envs)])
+        return res
       elif hasattr(self, 'ag_curiosity'):
         state = self.ag_curiosity.relabel_state(state)
-        
+    # normalize
     state = flatten_state(state)  # flatten goal environments
     if hasattr(self, 'state_normalizer'):
       state = self.state_normalizer(state, update=self.training)
-
-    if res is not None:
-      return res
-
+    # get action
     state = self.torch(state)
-
     if self.use_actor_target:
       action = self.numpy(self.actor_target(state))
     else:
