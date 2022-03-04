@@ -11,16 +11,21 @@
 
 ## Experinment TODO
 
-- [ ] Update interval
-  - [ ] 1 update / 1 step
-  - [ ] 10 updates / 10 steps
-  - [ ] 100 updates / 100 steps
-  - [ ] 1000 updates / 1000 steps
-- [ ] Update times
-  - [ ] 2000 batch 1Hz
-  - [ ] 20000 batch 0.1Hz
-  - [ ] 200000 batch 0.01Hz
-  - [ ] 2000000 batch 0.001Hz
+- [x] Update Interval
+  - k updates/ k steps
+  
+    <img src="https://tva1.sinaimg.cn/large/e6c9d24ely1gzxj87qydpj21bq0niaf9.jpg" alt="image-20220304081310066" style="zoom: 25%;" />
+  
+    <img src="https://tva1.sinaimg.cn/large/e6c9d24ely1gzxj8sckf9j21co0k4n0f.jpg" alt="image-20220304081344822" style="zoom:25%;" />
+  
+  - Conclusion:
+  
+    - Freqent update performs better and not hurt running time.
+  
+- [ ] Update Barch Size
+  - [ ] 1000 batch 0.5 Hz
+  - [ ] 100000 batch 0.05Hz
+  - [ ] 1000000 batch 0.005Hz
 ## Tricks
 
 1. clip target network
@@ -43,18 +48,19 @@ PYTHONPATH=./ python experiments/benchmarks/train_her.py --env FetchPickAndPlace
   config.actor_lr = 1e-3
   config.critic_lr = 1e-3
   config.actor_weight_decay = 0.
-  config.action_l2_regularization = 1e-1
-  config.target_network_update_freq = 40
+  config.action_l2_regularization = 1e-2
+  config.target_network_update_freq = 10
   config.target_network_update_frac = 0.05
-  config.optimize_every = 1 # num_updates/step
-  config.batch_size = 2000
-  config.warm_up = 2500 # steps wait to update
-  config.initial_explore = 5000 # random explore steps
-  config.replay_size = int(1e6)
+  config.optimize_every = 2 # num_updates/step
+  config.batch_size = 1000
+  config.warm_up = 5000 # steps wait to update
+  config.initial_explore = 10000 # random explore steps
   config.action_noise = 0.1
-  config.eexplore = 0.1 # total random action rate (epsilon-greedy)
+  config.eexplore = 0.2 # total random action rate (epsilon-greedy)
   config.go_eexplore = 0.1 # for curiosity
   config.go_reset_percent = 0. # for curiosity
-  config.her = 'rfaab_1_4_3_1_1' # future-actual-achieved-behavior
-  config.grad_value_clipping = 5.
+  config.grad_value_clipping = -1
+  config.her = 'futureactual_2_2' # future-actual-achieved-behavior
+  config.replay_size = int(2.5e6)
+  config.activ = 'relu'
 ```
