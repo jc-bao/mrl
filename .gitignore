@@ -127,3 +127,4 @@ slurm_output/
 
 results/
 */results/
+*/.DS_Store

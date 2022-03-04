@@ -7,7 +7,8 @@
 - [ ] D4PG
 - [ ] Auto Curriculum
 - [ ] Wandb
-- [ ] Optimize every step? Try to collect more, update with more.
+- [x] Optimize every step? Try to collect more, update with more.
+  - not helpful
 
 ## Experinment TODO
 

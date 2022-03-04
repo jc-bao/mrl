@@ -61,8 +61,8 @@ class MLP(nn.Module):
     
 ######################################################################################################
 # Bodies. These are feature extractors; should be combined with a Head 
+# in: input_size out: feature_size
 ######################################################################################################
-
 
 class NatureConvBody(nn.Module):
   def __init__(self, in_channels=4, feature_dim=512, norm = nn.Identity, activ = GELU):
@@ -105,6 +105,7 @@ class FCBody(nn.Module):
 
   def forward(self, x):
     return self.f(x)
+
 
 
 ######################################################################################################
