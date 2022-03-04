@@ -1,0 +1,1 @@
+PYTHONPATH=../../../ python -m cProfile -o her.prof ../train_her.py --env FetchPickAndPlace-v1 --num_envs 8 --parent_folder ./results --her future_4

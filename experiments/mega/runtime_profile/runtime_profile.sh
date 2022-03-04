@@ -1,0 +1,1 @@
+PYTHONPATH=../../../ python -m cProfile -o omega.prof ../train_mega.py  --env pickplace_obj_obj --pp_in_air_percentage 1. --hard --tb OMEGA --max_steps 5000000 --seed 111 --ag_curiosity minkde --replay_size 5000000 --save_embeddings  --transition_to_dg --optimize_every 4 --her rfaab_1_5_2_1_1
