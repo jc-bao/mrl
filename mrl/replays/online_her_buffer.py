@@ -44,7 +44,7 @@ class OnlineHERBuffer(mrl.Module):
                 ("bg", self.goal_space.shape), # behavioral goal (i.e., intrinsic if curious agent)
                 ("dg", self.goal_space.shape)] # desired goal (even if ignored behaviorally)
 
-    self.buffer = Buffer(self.size, items)
+    self.buffer = Buffer(self.size, items, self.config.batch_size)
     self._subbuffers = [[] for _ in range(self.env.num_envs)]
     self.n_envs = self.env.num_envs
 
@@ -90,6 +90,7 @@ class OnlineHERBuffer(mrl.Module):
         trajectory = [np.stack(a) for a in zip(*self._subbuffers[i])]
         self.buffer.add_trajectory(*trajectory)
         self._subbuffers[i] = []
+
 
   def sample(self, batch_size, to_torch=True):
     if hasattr(self, 'prioritized_replay'):
