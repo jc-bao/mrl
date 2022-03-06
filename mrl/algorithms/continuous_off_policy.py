@@ -181,14 +181,16 @@ class OffPolicyActorCritic(mrl.Module):
 
   def _optimize(self):
     if len(self.replay_buffer) > self.config.warm_up:
-      states, actions, rewards, next_states, gammas = self.replay_buffer.sample(
-          self.config.batch_size)
+      states, actions, rewards, next_states, gammas = self.replay_buffer.sample()
 
       self.optimize_from_batch(states, actions, rewards, next_states, gammas)
       
       if self.config.opt_steps % self.config.target_network_update_freq == 0:
         for target_model, model in self.targets_and_models:
           soft_update(target_model, model, self.config.target_network_update_frac)
+      
+      # states, actions, rewards, next_states, gammas = self.replay_buffer.sample_resquest(
+      #     self.config.batch_size)
 
   def optimize_from_batch(self, states, actions, rewards, next_states, gammas):
     raise NotImplementedError('Subclass this!')

@@ -1,3 +1,4 @@
+import pstats
 import mrl
 import gym
 from mrl.replays.core.shared_buffer import SharedMemoryTrajectoryBuffer as Buffer
@@ -90,6 +91,18 @@ class OnlineHERBuffer(mrl.Module):
         trajectory = [np.stack(a) for a in zip(*self._subbuffers[i])]
         self.buffer.add_trajectory(*trajectory)
         self._subbuffers[i] = []
+
+  # def sample_request(self, batch_size):
+  #   pass
+
+  # def sample_response(self, to_torch=True):
+
+  #   if to_torch:
+  #     return (self.torch(states), self.torch(actions),
+  #           self.torch(rewards), self.torch(next_states),
+  #           self.torch(gammas))
+  #   else:
+  #     return (states, actions, rewards, next_states, gammas)
 
   def sample(self, batch_size, to_torch=True):
     if hasattr(self, 'prioritized_replay'):
