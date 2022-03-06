@@ -99,11 +99,11 @@ class MeanStdNormalizer(BaseNormalizer):
     self.epsilon = epsilon
 
   def __call__(self, x, update=True):
-    x.clip(-self.clip_before, self.clip_before, out = x)
     if self.rms is None:
       self.rms = RunningMeanStd(shape=(1, ) + x.shape[1:])
     if not self.read_only and update:
       self.rms.update(x)
+    x.clip(-self.clip_before, self.clip_before, out = x)
     normed = (x - self.rms.mean) / np.sqrt(self.rms.var + self.epsilon)
     return normed.clip(-self.clip_after, self.clip_after, out=normed)
 

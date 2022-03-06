@@ -183,7 +183,6 @@ class OffPolicyActorCritic(mrl.Module):
     if len(self.replay_buffer) > self.config.warm_up:
       states, actions, rewards, next_states, gammas = self.replay_buffer.sample(
           self.config.batch_size)
-
       self.optimize_from_batch(states, actions, rewards, next_states, gammas)
       
       if self.config.opt_steps % self.config.target_network_update_freq == 0:
