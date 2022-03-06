@@ -52,7 +52,7 @@ class RingBuffer(object):
     :param idxs: (int or numpy int) the indexes
     :return: (np.ndarray) the stored information in the buffer at the asked positions
     """
-    return self.data[(self.start.value + idxs) % self.length.value]
+    return self.data.take((self.start.value + idxs) % self.length.value, axis=0)
 
   def append(self, var):
     """

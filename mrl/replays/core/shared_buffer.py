@@ -1,3 +1,4 @@
+import threading
 import numpy as np
 import multiprocessing as mp
 from mrl.replays.core.replay_buffer import RingBuffer
@@ -5,21 +6,23 @@ from mrl.utils.misc import AttrDict
 from multiprocessing import RawArray, RawValue
 from collections import OrderedDict
 
-BUFF = None
-
 def worker_init(buffer : AttrDict):
   global BUFF
   BUFF = buffer
 
-def future_samples(idxs):
+def future_samples(idxs, mode = 'normal'):
   """Assumes there is an 'ag' field, and samples n transitions, pairing each with a future ag
   from its trajectory."""
   global BUFF
-
   # get original transitions
+  
   transition = []
+  idxs = np.sort(idxs)
   for buf in BUFF.items:
-    item = BUFF[buf].get_batch(idxs)
+    if buf in ['buffer_reward', 'buffer_bg', 'buffer_dg']:
+      item = None
+    else:
+      item = BUFF[buf].get_batch(idxs)
     transition.append(item)
 
   # add random future goals
@@ -27,6 +30,13 @@ def future_samples(idxs):
   idxs = idxs + np.round(np.random.uniform(size=len(idxs)) * tlefts).astype(np.int64)
   ags = BUFF.buffer_ag.get_batch(idxs)
   transition.append(ags)
+  return transition
+
+def real_samples(idx):
+  transition = []
+  for buf in BUFF.items:
+    item = BUFF[buf].get_batch(idx)
+    transition.append(item)
   return transition
 
 
@@ -164,7 +174,7 @@ class SharedMemoryTrajectoryBuffer():
   computing statistics of whole trajectories, or searching forward through the buffer.
   """
 
-  def __init__(self, limit, item_shape, n_cpu=1):
+  def __init__(self, limit, item_shape, max_batch_size, n_cpu=1, use_sample_process = False):
     """
     The replay buffer object. Stores everything in float32.
 
@@ -176,13 +186,12 @@ class SharedMemoryTrajectoryBuffer():
           ("dones", (1,))]
     """
     self.limit = limit
+    self.max_batch_size = max_batch_size
 
     global BUFF
     BUFF = AttrDict()
     self.BUFF = BUFF # a global object that has shared RawArray-based RingBuffers.
-
     BUFF.items = []
-
     # item buffers
     for name, shape in item_shape:
       BUFF.items.append('buffer_' + name)
@@ -213,6 +222,21 @@ class SharedMemoryTrajectoryBuffer():
     self.n_cpu = n_cpu
     if n_cpu > 1:
       self.pool = mp.Pool(n_cpu, initializer=worker_init, initargs=(BUFF,))
+    if use_sample_process:
+      '''
+      # method1: use Queue to communicate
+      # Pros: can pass any type
+      # Cons: slow
+      '''
+      # self.future_q = mp.Queue()
+      self.future_len_list = [25,4,1,25,1,3,3,3,3,3]
+      self.future_q = mp.Array('d', (self.max_batch_size*sum(self.future_len_list))) # TODO: not hard code 
+      self.future_q[0] = -100
+      self.sample_q = mp.Array('d', (self.max_batch_size*sum(self.future_len_list[:-1]))) # TODO: not hard code 
+      self.sample_q[0] = -100
+      self.buffer_size_value = mp.Value('i', self.size)
+      self.sample_process = mp.Process(target=sample_future_process, args=(self.max_batch_size, self.future_q, self.sample_q, self.buffer_size_value))
+      self.sample_process.start()
 
   def add_trajectory(self, *items):
     """
@@ -248,6 +272,10 @@ class SharedMemoryTrajectoryBuffer():
       _, idxs = self.trajectories.popitem(last=False)
       self.total_trajectory_len -= len(idxs)
     self.current_trajectory += 1
+    # update buffer size
+    if hasattr(self,'future_q'):
+      with self.buffer_size_value.get_lock():
+        self.buffer_size_value.value = self.size
 
   def sample_trajectories(self, n, group_by_buffer=False, from_m_most_recent=None):
     """
@@ -281,6 +309,21 @@ class SharedMemoryTrajectoryBuffer():
     if self.size == 0:
       return []
 
+    if hasattr(self, 'sample_q'): 
+      if self.sample_q[0] != -100 and self.max_batch_size > batch_size:
+        # if not self.future_q.empty():
+        batch = np.split(\
+          np.frombuffer(self.sample_q.get_obj()).reshape(self.max_batch_size, sum(self.future_len_list[:-1]))\
+            [:batch_size],\
+              np.cumsum(self.future_len_list[:-2]), \
+                axis=-1)
+        # print('catch')
+        with self.sample_q.get_lock():
+          self.sample_q[0] = -100
+        return batch
+      with self.sample_q.get_lock():
+        self.sample_q[0] = -100
+
     if batch_idxs is None:
       batch_idxs = np.random.randint(self.size, size=batch_size)
 
@@ -288,7 +331,7 @@ class SharedMemoryTrajectoryBuffer():
     for buf in BUFF.items:
       item = BUFF[buf].get_batch(batch_idxs)
       transition.append(item)
-
+    
     return transition
 
   def sample_slices(self, batch_size, slice_size):
@@ -326,15 +369,30 @@ class SharedMemoryTrajectoryBuffer():
     return n_step_samples((batch_idxs, n_steps, gamma))
 
   def sample_future(self, batch_size, batch_idxs=None):
+    if hasattr(self, 'future_q'): 
+      if self.future_q[0] != -100 and self.max_batch_size > batch_size:
+        # if not self.future_q.empty():
+        batch = np.split(\
+          np.frombuffer(self.future_q.get_obj()).reshape(self.max_batch_size, sum(self.future_len_list))\
+            [:batch_size],\
+              np.cumsum(self.future_len_list[:-1]), \
+                axis=-1)
+        # print('catch')
+        with self.future_q.get_lock():
+          self.future_q[0] = -100
+        return batch
+      with self.future_q.get_lock():
+        self.future_q[0] = -100
     if batch_idxs is None:
       batch_idxs = np.random.randint(self.size, size=batch_size)
-
     if self.pool is not None:
       res = self.pool.map(future_samples, np.array_split(batch_idxs, self.n_cpu))
-      res = [np.concatenate(x, 0) for x in zip(*res)]
-      return res
+      batch = [np.concatenate(x, 0) for x in zip(*res)]
+    else:
+      batch = future_samples(batch_idxs)
+      # print('miss')
+    return batch
 
-    return future_samples(batch_idxs)
 
   def sample_from_goal_buffer(self, buffer, batch_size, batch_idxs=None):
     """buffer is one of 'ag', 'dg', 'bg'"""
@@ -388,3 +446,17 @@ class SharedMemoryTrajectoryBuffer():
   @property
   def num_trajectories(self):
     return len(self.trajectories)
+
+def sample_future_process(batch_size, future_q, sample_q, buffer_size):
+  # problem!!!! the size should change
+  while True: 
+    # if batch_queue.empty() and buffer_size.value > 0:
+    # print(need_generate.value, buffer_size.value)
+    if future_q[0] < -99 and buffer_size.value > 0:
+      batch_idxs = np.random.randint(low = 0, high = buffer_size.value, size=batch_size)
+      batch_np = (np.concatenate(future_samples(batch_idxs), axis=-1).astype(np.double).flatten())
+      memoryview(future_q._obj).cast('B').cast('d')[:] = batch_np
+    if sample_q[0] < -99 and buffer_size.value > 0:
+      batch_idxs = np.random.randint(low = 0, high = buffer_size.value, size=batch_size)
+      batch_np = (np.concatenate(real_samples(batch_idxs), axis=-1).astype(np.double).flatten())
+      memoryview(sample_q._obj).cast('B').cast('d')[:] = batch_np

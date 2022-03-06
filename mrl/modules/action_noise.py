@@ -17,7 +17,6 @@ class ContinuousActionNoise(mrl.Module):
     if self.varied_action_noise:
       n_envs = self.env.num_envs
       factor = np.arange(0., 1. + (1./n_envs), 1./(n_envs-1)).reshape(n_envs, 1)
-    
     return action + (self.random_process.sample() * self.env.max_action * factor)[:len(action)]
 
   def save(self, save_folder):

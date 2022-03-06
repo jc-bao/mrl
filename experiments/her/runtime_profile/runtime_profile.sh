@@ -1,1 +1,1 @@
-PYTHONPATH=../../../ python -m cProfile -o her.prof ../train_her.py --env FetchPickAndPlace-v1 --num_envs 8 --parent_folder ./results --her future_4
+PYTHONPATH=../../../ python -m cProfile -o her_16env.prof ../train_her.py --env FetchPickAndPlace-v1 --num_envs 16 --parent_folder ./results --her future_4 --optimize_every 20 --batch_size 10000

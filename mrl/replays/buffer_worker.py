@@ -1,4 +1,3 @@
-import pstats
 import mrl
 import gym
 from mrl.replays.core.shared_buffer import SharedMemoryTrajectoryBuffer as Buffer
@@ -6,7 +5,7 @@ import numpy as np
 import pickle
 import os
 from mrl.utils.misc import batch_block_diag
-import queue,time
+import queue,time, multiprocessing as mp
 
 class OnlineHERBuffer(mrl.Module):
 
@@ -54,6 +53,35 @@ class OnlineHERBuffer(mrl.Module):
       self.fut, self.act, self.ach, self.beh = parse_hindsight_mode(self.config.demo_her)
     else:
       self.fut, self.act, self.ach, self.beh = parse_hindsight_mode(self.config.her)
+    self.max_batch_size = self.config.batch_size
+
+    # TODO not hard code this
+    # states
+    self.states_size = 28
+    self.states_array = mp.Array('d', (self.max_batch_size*self.states_size))
+    self.states_array[0] = -100
+    # actions
+    self.actions_size = 4
+    self.actions_array = mp.Array('d', (self.max_batch_size*self.actions_size))
+    self.actions_array[0] = -100
+    # rewards
+    self.rewards_size = 1
+    self.rewards_array = mp.Array('d', (self.max_batch_size*self.rewards_size))
+    self.rewards_array[0] = -100
+    # next states
+    self.next_states_size_size = 28
+    self.next_states_size_array = mp.Array('d', (self.max_batch_size*self.next_states_size_size))
+    self.next_states_size_array[0] = -100
+    # gammas
+    self.gammas_size = 1
+    self.gammas_array = mp.Array('d', (self.max_batch_size*self.gammas_size))
+    self.gammas_array[0] = -100
+
+    # process
+    self.buffer_worker = mp.Process(target=buffer_worker, args=(
+      self.size, items, self.max_batch_size, \
+        
+    ))
 
   def _process_experience(self, exp):
     if getattr(self, 'logger'):
@@ -92,7 +120,29 @@ class OnlineHERBuffer(mrl.Module):
         self.buffer.add_trajectory(*trajectory)
         self._subbuffers[i] = []
 
+  # def sample_async(self, batch_size, to_torch=True):
   def sample(self, batch_size, to_torch=True):
+    if self.states_array[0] < -99 or \
+      self.actions_array[0] < -99 or \
+        self.rewards_array[0] < -99 or \
+          self.next_states_array[0] < -99 or self.gammas_array < -99:
+          self.sample_now(batch_size, to_torch)
+    else:
+      states = np.frombuffer(self.states_array.get_obj()).reshape(self.max_batch_size, -1)[:batch_size]
+      actions = np.frombuffer(self.actions_array.get_obj()).reshape(self.max_batch_size, -1)[:batch_size]
+      rewards = np.frombuffer(self.rewards_array.get_obj()).reshape(self.max_batch_size, -1)[:batch_size]
+      next_states = np.frombuffer(self.next_states_array.get_obj()).reshape(self.max_batch_size, -1)[:batch_size]
+      gammas = np.frombuffer(self.gammas_array.get_obj()).reshape(self.max_batch_size, -1)[:batch_size]
+      if to_torch:
+        return (self.torch(states), self.torch(actions),
+              self.torch(rewards), self.torch(next_states),
+              self.torch(gammas))
+      else:
+        return (states, actions, rewards, next_states, gammas)
+      
+
+
+  def sample_now(self, batch_size, to_torch=True):
     if hasattr(self, 'prioritized_replay'):
       batch_idxs = self.prioritized_replay(batch_size)
     else:
@@ -193,6 +243,7 @@ class OnlineHERBuffer(mrl.Module):
       states = self.state_normalizer(states, update=False).astype(np.float32)
       next_states = self.state_normalizer(
           next_states, update=False).astype(np.float32)
+    
     if to_torch:
       return (self.torch(states), self.torch(actions),
             self.torch(rewards), self.torch(next_states),
@@ -262,3 +313,11 @@ def parse_hindsight_mode(hindsight_mode : str):
     beh = 0.
 
   return fut, act, ach, beh
+
+def buffer_worker(size, items, batch_size, \
+  mean, var, \
+    states_array, actions_array, rewards_array, next_states_array, dones_array, \
+    ):
+  buffer = Buffer(size, items, batch_size)
+  while True:
+
