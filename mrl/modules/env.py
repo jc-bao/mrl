@@ -82,6 +82,14 @@ class EnvModule(mrl.Module):
     self.state = res[0]
     return res
 
+  def step_async(self, action):
+    self.env.step_async(action)
+
+  def step_wait(self):
+    res = self.env.step_wait()
+    self.state = res[0]
+    return res
+
   def reset(self, indices=None):
     if not indices:
       self.state = self.env.reset()
