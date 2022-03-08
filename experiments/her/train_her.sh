@@ -1,1 +1,1 @@
-PYTHONPATH=../../ python train_her.py --env FetchPickAndPlace-v1 --num_envs 8 --parent_folder ./results --her future_4 --optimize_every 20 --batch_size 10000
+PYTHONPATH=../../ python train_her.py --env PandaTowerBimanual-v1 --num_envs 16 --parent_folder ./results --her future_4 --prefix interval20 --optimize_every 20 --max_steps 10000000

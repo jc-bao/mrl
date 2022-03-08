@@ -26,12 +26,11 @@ class StandardTrain(mrl.Module):
     state = env.state 
 
     for j in range(num_steps // env.num_envs):
+      # if j == 0:
       action = self.policy(state)
-      if j == 0:
-        action = self.policy(state)
-        next_state, reward, done, info = env.step(action)
-      else:
-        next_state, reward, done, info = env.step_wait()
+      next_state, reward, done, info = env.step(action)
+      # else:
+      #   next_state, reward, done, info = env.step_wait()
 
       if self.reset_idxs:
         env.reset(self.reset_idxs)
@@ -53,8 +52,8 @@ class StandardTrain(mrl.Module):
         time.sleep(0.02)
         env.render()
 
-      action = self.policy(state)
-      env.step_async(action)
+      # action = self.policy(state)
+      # env.step_async(action)
       
       for _ in range(env.num_envs):
         self.env_steps += 1
