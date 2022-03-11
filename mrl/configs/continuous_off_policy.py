@@ -13,6 +13,7 @@ default_ddpg_config = lambda: AnnotatedAttrDict(
     optimize_every=(2, 'how often optimize is called, in terms of environment steps'),
     optimize_times=(1, 'how many times to update per optimize call'),
     batch_size=(2000, 'batch size for training the actors/critics'),
+    divide_batch_num=(1, 'devide the large batch into sub batches'),
     warm_up=(10000, 'minimum steps in replay buffer needed to optimize'),  
     initial_explore=(10000, 'steps that actor acts randomly for at beginning of training'), 
     grad_norm_clipping=(-1., 'gradient norm clipping'),
@@ -66,6 +67,7 @@ def protoge_config():
   config.target_network_update_frac = 0.05
   config.optimize_every = 1
   config.batch_size = 2000
+  config.divide_batch_num = 1
   config.warm_up = 2500
   config.initial_explore = 5000
   config.replay_size = int(1e6)
@@ -81,6 +83,7 @@ def protoge_config():
 def best_slide_config():
   config = protoge_config()
   config.batch_size = 1000
+  config.divide_batch_num = 1
   config.eexplore = 0.2
   config.action_noise = 0.1
   config.grad_value_clipping = -1
@@ -178,9 +181,10 @@ def td3_config():
 def handover_config():
   config = default_ddpg_config()
   # update 
-  config.optimize_every = 100
+  config.optimize_every = 100*64
   config.optimize_times = 40
-  config.batch_size = 256
+  config.batch_size = 256*64
+  config.divide_batch_num = 64
   config.actor_lr = 1e-3
   config.critic_lr = 1e-3
   config.target_network_update_frac = 0.05
@@ -188,7 +192,7 @@ def handover_config():
   # random
   config.seed = 123
   # replay
-  config.replay_size = int(64e6)
+  config.replay_size = int(1e6)
   config.her = 'future_4'
   # rl
   config.gamma = 0.98

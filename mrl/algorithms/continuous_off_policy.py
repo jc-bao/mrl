@@ -175,7 +175,7 @@ class OffPolicyActorCritic(mrl.Module):
 
   def load(self, save_folder : str):
     path = os.path.join(save_folder, self.module_name + '.pt')
-    checkpoint = torch.load(path)
+    checkpoint = torch.load(path, map_location=torch.device(self.config.device))
     self.actor_opt.load_state_dict(checkpoint['actor_opt_state_dict'])
     self.critic_opt.load_state_dict(checkpoint['critic_opt_state_dict'])
 
@@ -206,8 +206,9 @@ class DDPG(OffPolicyActorCritic):
     if hasattr(self, 'logger') and self.config.opt_steps % 1000 == 0:
       self.logger.add_histogram('Optimize/Target_q', target)
     
-    q = self.critic(states, actions)
-    critic_loss = F.mse_loss(q, target)
+    q = self.critic(states, actions) # (batch_size, )
+    # critic_loss = F.mse_loss(q, target)
+    critic_loss = (q - target).reshape(self.config.divide_batch_num, -1).pow(2).mean(dim=-1).sum()
 
     self.critic_opt.zero_grad()
     critic_loss.backward()

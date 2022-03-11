@@ -42,7 +42,6 @@ class Agent():
       self,
       module_list: Iterable,  # list of mrl.Modules (possibly nested)
       config: AttrDict):  # hyperparameters and module settings
-
     self.config = config
     parent_folder = config.parent_folder
     assert parent_folder, "Setting the agent's parent folder is required!"
@@ -156,6 +155,7 @@ class Agent():
     
     with open(os.path.join(save_folder, 'config.pickle'), 'rb') as f:
       self.config = pickle.load(f)
+      self.config.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     for module in self.module_dict.values():
       print("Loading module {}".format(module.module_name))
@@ -346,7 +346,6 @@ def config_to_agent(config_dict: dict):
       module_list += flatten_modules(v)
     else:
       config[k] = v
-
   return Agent(module_list, config)
 
 

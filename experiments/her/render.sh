@@ -1,0 +1,1 @@
+PYTHONPATH=../../ python render.py --env PandaRearrangeBimanual-v0 --parent_folder ./results --her future_4 --prefix default

@@ -4,16 +4,19 @@ import numpy as np
 
 class EpisodicEval(mrl.Module):
   def __init__(self):
-    super().__init__('eval', required_agent_modules = ['eval_env', 'policy'], locals=locals())
+    super().__init__('eval', required_agent_modules = ['policy'], locals=locals())
   
-  def __call__(self, num_episodes : int, *unused_args):
+  def __call__(self, num_episodes : int, *unused_args, use_train_env = False):
     """
     Runs num_steps steps in the environment and returns results.
     Results tracking is done here instead of in process_experience, since 
     experiences aren't "real" experiences; e.g. agent cannot learn from them.  
     """
     self.eval_mode()
-    env = self.eval_env
+    if use_train_env:
+      env = self.env
+    else:
+      env = self.eval_env
     num_envs = env.num_envs
     
     episode_rewards, episode_steps = [], []
@@ -31,7 +34,13 @@ class EpisodicEval(mrl.Module):
 
       while not np.all(dones):
         action = self.policy(state)
+        if use_train_env:
+          action = action[0] # TODO fix this hacky render method
         state, reward, dones_, infos = env.step(action)
+        if use_train_env:
+          reward = [reward]
+          dones_ = [dones_]
+          infos = [infos]
 
         for i, (rew, done, info) in enumerate(zip(reward, dones_, infos)):
           if dones[i]:

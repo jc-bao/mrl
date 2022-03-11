@@ -28,7 +28,7 @@ class PytorchModel(mrl.Module):
 
   def load(self, save_folder : str):
     path = os.path.join(save_folder, self.module_name + '.pt')
-    self.model.load_state_dict(torch.load(path), strict=False)
+    self.model.load_state_dict(torch.load(path, map_location=torch.device(self.config.device)), strict=False)
 
   def copy(self, new_name):
     """Makes a copy of the Model; e.g., for target networks"""

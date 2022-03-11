@@ -26,7 +26,8 @@ class EnvModule(mrl.Module):
       num_envs: int = 1,
       seed: Optional[int] = None,
       name: Optional[str] = None,
-      episode_life=True  # for Atari
+      episode_life=True,  # for Atari
+      direct_from_gym = False
   ):
 
     super().__init__(name or 'env', required_agent_modules=[], locals=locals())
@@ -36,18 +37,22 @@ class EnvModule(mrl.Module):
     if seed is None:
       seed = int(time.time())
 
-    if isinstance(env, str):
-      sample_env = make_env_by_id(env, seed, 0, episode_life)()
-      env_list = [make_env_by_id(env, seed, i, episode_life) for i in range(num_envs)]
+    if direct_from_gym:
+      sample_env = self.env = gym.make('PandaRearrangeBimanual-v0', render=True, \
+        task_kwargs={'goal_xyz_range': [0.3,0.4,0.3]})
     else:
-      sample_env = make_env(env, seed, 0)()
-      assert isinstance(sample_env, gym.core.Env), "Only gym environments supported for now!"
-      env_list = [make_env(env, seed, i) for i in range(num_envs)]
+      if isinstance(env, str):
+        sample_env = make_env_by_id(env, seed, 0, episode_life)()
+        env_list = [make_env_by_id(env, seed, i, episode_life) for i in range(num_envs)]
+      else:
+        sample_env = make_env(env, seed, 0)()
+        assert isinstance(sample_env, gym.core.Env), "Only gym environments supported for now!"
+        env_list = [make_env(env, seed, i) for i in range(num_envs)]
 
-    if num_envs == 1:
-      self.env = DummyVecEnv(env_list)
-    else:
-      self.env = SubprocVecEnv(env_list)
+      if num_envs == 1:
+        self.env = DummyVecEnv(env_list)
+      else:
+        self.env = SubprocVecEnv(env_list)
     print('Initializing env!')
 
     self.render = self.env.render

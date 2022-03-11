@@ -12,24 +12,22 @@ import numpy as np
 import torch
 import panda_gym
 
-config = handover_config()
+config = best_slide_config()
 config.alg = 'ddpg'
 
 def main(args):
 	# parse args
-	if args.num_envs is None:
-		import multiprocessing as mp
-		args.num_envs = max(mp.cpu_count() - 1, 1)
-	args.num_eval_envs = args.num_envs
+	args.num_eval_envs = 1
 	merge_args_into_config(args, config)
 	if config.gamma < 1.: 
 		config.clip_target_range = (np.round(-(1 / (1 - config.gamma)), 2), 0.)
 	if config.gamma == 1: 
 		config.clip_target_range = (np.round(-args.env_max_step - 5, 2), 0.)
 	config.agent_name = make_agent_name(config, ['env', 'her', 'seed', 'tb'], prefix=args.prefix)
+
 	# setup modules
 	config.update(
-			dict(trainer=StandardTrain(),
+			dict(
 					 evaluation=EpisodicEval(),
 					 policy=ActorPolicy(),
 					 logger=Logger(),
@@ -37,13 +35,9 @@ def main(args):
 					 replay=OnlineHERBuffer(),
 					 action_noise=ContinuousActionNoise(GaussianProcess, std=ConstantSchedule(args.action_noise)),
 					 algorithm=DDPG()))
-	torch.set_num_threads(min(4, args.num_envs))
-	torch.set_num_interop_threads(min(4, args.num_envs))
-	assert gym.envs.registry.env_specs.get(args.env) is not None
 	# make env
-	env = lambda: gym.make(args.env, render=False)
-	config.module_train_env = EnvModule(env, num_envs=config.num_envs, seed=config.seed)
-	config.module_eval_env = EnvModule(env, num_envs=config.num_eval_envs, name='eval_env', seed=config.seed + 1138)
+	env = lambda: gym.make(args.env, render=True)
+	config.module_eval_env = EnvModule(env, num_envs=config.num_eval_envs, name='env', seed=config.seed + 1138, direct_from_gym=True)
 	# actor-critic
 	e = config.module_eval_env
 	config.actor = PytorchModel(
@@ -53,26 +47,17 @@ def main(args):
 	# fix never done
 	if e.goal_env:
 		config.never_done = True  # NOTE: This is important in the standard Goal environments, which are never done
+	config.device='cpu'
 	# setup agent (manager)
 	agent  = mrl.config_to_agent(config)
 	
 	# initial test (redundant)
 	num_eps = max(args.num_eval_envs * 3, 10)
-	res = np.mean(agent.eval(num_episodes=num_eps).rewards)
-	agent.logger.log_color(f'Initial test reward ({num_eps} eps):', f'{res:.2f}')
+	agent.eval(num_episodes=num_eps, use_train_env=True)
 
 	# main loop
 	for epoch in range(int(args.max_steps // args.epoch_len)):
-		# train
-		t = time.time()
-		agent.train(num_steps=args.epoch_len)
-		# eval
-		res = np.mean(agent.eval(num_episodes=num_eps).rewards)
-		# log
-		agent.logger.log_color(f'Test reward ({num_eps} eps):', f'{res:.2f}')
-		agent.logger.log_color('Epoch time:', '{:.2f}'.format(time.time() - t), color='yellow')
-		print(f"Saving agent at epoch {epoch}")
-		agent.save('checkpoint')
+		agent.eval(num_episodes=num_eps, use_train_env=True)
 
 # 3. Declare args for modules (also parent_folder is required!)
 if __name__ == '__main__':
