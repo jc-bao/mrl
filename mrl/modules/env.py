@@ -55,9 +55,13 @@ class EnvModule(mrl.Module):
         self.env = SubprocVecEnv(env_list)
     print('Initializing env!')
 
+    # get env params
     self.render = self.env.render
     self.observation_space = sample_env.observation_space
     self.action_space = sample_env.action_space
+    self.robot_obs_size = getattr(self.env.envs[0], 'robot_obs_size', 10)
+    self.obj_obs_size = getattr(self.env.envs[0], 'single_task_obs_size', 15)
+    self.goal_size = getattr(self.env.envs[0].task, 'single_goal_size', 3)
 
     if isinstance(self.action_space, gym.spaces.Discrete):
       self.action_dim = self.action_space.n

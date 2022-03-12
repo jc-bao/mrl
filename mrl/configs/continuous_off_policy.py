@@ -207,3 +207,12 @@ def handover_config():
   config.eexplore = 0.3
   config.go_reset_percent = 0.
   return config
+
+def handover_default_config():
+  config = best_slide_config()
+  # attentin
+  config.n_heads = 3
+  config.hidden_size = 64*config.n_heads
+  config.n_attention_blocks = 2
+  config.optimize_every = 20
+  return config

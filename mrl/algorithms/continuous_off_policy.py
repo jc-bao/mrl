@@ -206,7 +206,7 @@ class DDPG(OffPolicyActorCritic):
     if hasattr(self, 'logger') and self.config.opt_steps % 1000 == 0:
       self.logger.add_histogram('Optimize/Target_q', target)
     
-    q = self.critic(states, actions) # (batch_size, )
+    q = self.critic(actions, states) # (batch_size, )
     # critic_loss = F.mse_loss(q, target)
     critic_loss = (q - target).reshape(self.config.divide_batch_num, -1).pow(2).mean(dim=-1).sum()
 
@@ -232,7 +232,7 @@ class DDPG(OffPolicyActorCritic):
       noise = torch.randn_like(a) * (self.config.policy_opt_noise * self.action_scale)
       a = (a + noise).clamp(-self.action_scale, self.action_scale)
       
-    actor_loss = -self.critic(states, a)[:,-1].mean()
+    actor_loss = -self.critic(a, states)[:,-1].mean()
     if self.config.action_l2_regularization:
       actor_loss += self.config.action_l2_regularization * F.mse_loss(a / self.action_scale, torch.zeros_like(a))
 
@@ -275,7 +275,7 @@ class TD3(OffPolicyActorCritic):
     if hasattr(self, 'logger') and self.config.opt_steps % 1000 == 0:
       self.logger.add_histogram('Optimize/Target_q', target)
 
-    q1, q2 = self.critic(states, actions), self.critic2(states, actions)
+    q1, q2 = self.critic(actions, states), self.critic2(actions, states)
     critic_loss = F.mse_loss(q1, target) + F.mse_loss(q2, target)
 
     self.critic_opt.zero_grad()
@@ -297,7 +297,7 @@ class TD3(OffPolicyActorCritic):
       if self.config.get('policy_opt_noise'):
         noise = torch.randn_like(a) * (config.policy_opt_noise * self.action_scale)
         a = (a + noise).clamp(-self.action_scale, self.action_scale)
-      actor_loss = -torch.min(self.critic(states, a)[:,-1], self.critic2(states, a)[:,-1]).mean()
+      actor_loss = -torch.min(self.critic(a, states)[:,-1], self.critic2(a, states)[:,-1]).mean()
       if self.config.action_l2_regularization:
         actor_loss += self.config.action_l2_regularization * F.mse_loss(a / self.action_scale, torch.zeros_like(a))
 
@@ -332,7 +332,7 @@ class SAC(OffPolicyActorCritic):
     if hasattr(self, 'logger') and self.config.opt_steps % 1000 == 0:
       self.logger.add_histogram('Optimize/Target_q', target)
 
-    q1, q2 = self.critic(states, actions), self.critic2(states, actions)
+    q1, q2 = self.critic(actions, states), self.critic2(actions, states)
     critic_loss = F.mse_loss(q1, target) + F.mse_loss(q2, target)
 
     self.critic_opt.zero_grad()
@@ -350,7 +350,7 @@ class SAC(OffPolicyActorCritic):
       p.requires_grad = False
 
     a, logp = self.actor(states)
-    q = torch.min(self.critic(states, a), self.critic2(states, a))
+    q = torch.min(self.critic(a, states), self.critic2(a, states))
 
     actor_loss = (config.entropy_coef * logp - q).mean()
 
