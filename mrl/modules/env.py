@@ -59,9 +59,9 @@ class EnvModule(mrl.Module):
     self.render = self.env.render
     self.observation_space = sample_env.observation_space
     self.action_space = sample_env.action_space
-    self.robot_obs_size = getattr(self.env.envs[0], 'robot_obs_size', 10)
-    self.obj_obs_size = getattr(self.env.envs[0], 'single_task_obs_size', 15)
-    self.goal_size = getattr(self.env.envs[0].task, 'single_goal_size', 3)
+    self.robot_obs_size = getattr(sample_env, 'robot_obs_size', 10)
+    self.obj_obs_size = getattr(sample_env, 'single_task_obs_size', 15)
+    self.goal_size = getattr(sample_env.task, 'single_goal_size', 3)
 
     if isinstance(self.action_space, gym.spaces.Discrete):
       self.action_dim = self.action_space.n
@@ -85,6 +85,7 @@ class EnvModule(mrl.Module):
       self.state_dim = int(np.prod(self.env.observation_space.shape))
 
     self.state = self.env.reset()
+    sample_env.close()
 
   def step(self, action):
     res = self.env.step(action)
