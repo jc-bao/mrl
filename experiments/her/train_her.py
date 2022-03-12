@@ -101,7 +101,7 @@ if __name__ == '__main__':
                         help='Prefix for agent name (subfolder where it is saved)')
     parser.add_argument('--env', default="FetchReach-v1",
                         type=str, help="gym environment")
-    parser.add_argument('--max_steps', default=1000000,
+    parser.add_argument('--max_steps', default=int(1e10),
                         type=int, help="maximum number of training steps")
     parser.add_argument('--layers', nargs='+', default=(512, 512, 512),
                         type=int, help='hidden layers for actor/critic')
