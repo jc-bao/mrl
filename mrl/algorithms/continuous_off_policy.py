@@ -207,8 +207,7 @@ class DDPG(OffPolicyActorCritic):
       self.logger.add_histogram('Optimize/Target_q', target)
     
     q = self.critic(actions, states) # (batch_size, )
-    # critic_loss = F.mse_loss(q, target)
-    critic_loss = (q - target).reshape(self.config.divide_batch_num, -1).pow(2).mean(dim=-1).sum()
+    critic_loss = F.mse_loss(q, target)
 
     self.critic_opt.zero_grad()
     critic_loss.backward()

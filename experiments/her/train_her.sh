@@ -1,1 +1,1 @@
-PYTHONPATH=../../ python train_her.py --env PandaRearrangeBimanual-v0 --num_envs 16 --parent_folder ./results --her future_4 --prefix attn
+PYTHONPATH=../../ python train_her.py --env PandaTowerBimanual-v1 --num_envs 16 --parent_folder ./results --her future_4 --prefix change_back_to_old_env_fix_batchsz
