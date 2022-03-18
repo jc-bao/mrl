@@ -37,7 +37,7 @@ if __name__ == '__main__':
         # buffer
         replay_size=100,
         # update
-        batch_size=2,
+        batch_size=1000,
         actor_lr=1e-3,
         critic_lr=1e-3,
         target_network_update_freq = 10, 
@@ -47,9 +47,11 @@ if __name__ == '__main__':
         critic_weight_decay=0,
         device='cuda',
         clip_target_range = [-50, 0], 
-        action_l2_regularization=1e-2, 
+        action_l2_regularization=1e-2,
         # explore
         warm_up=5000,
+        eexplore = 0.2,
+        initial_explore = 10000, 
         future_warm_up=0,
         varied_action_noise=False,
         action_noise=0.2,
