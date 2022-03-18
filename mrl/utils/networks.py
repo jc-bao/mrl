@@ -22,11 +22,6 @@ class GELU(nn.Module):
     def forward(self, input):
         return F.gelu(input)
 
-
-######################################################################################################
-# Basic MLP, for non actor/critic things
-######################################################################################################
-
 class MLP(nn.Module):
     """Standard feedforward network.
     Args:
@@ -414,3 +409,28 @@ class AttnBody(nn.Module):
         goal_obs = x[:, self.robot_obs_size+self.obj_obs_size*num_obj:]\
             .reshape(batch_size, num_obj, self.goal_size)
         return torch.cat((robot_obs, obj_obs, goal_obs), dim=-1)
+
+
+class Actor(nn.Module):
+    """Returns batch of (action_dim,) vectors scaled to (-1, 1) (with tanh)"""
+
+    def __init__(self, body: nn.Module, action_dim: int, max_action: float):
+        super().__init__()
+        self.body = body
+        self.fc = layer_init(nn.Linear(self.body.feature_dim, action_dim))
+        self.max_action = max_action
+
+    def forward(self, x):
+        return self.max_action * torch.tanh(self.fc(self.body(x)))
+
+class Critic(nn.Module):
+    def __init__(self, body: nn.Module, output_dim: int, use_layer_init: bool = True):
+        super().__init__()
+        self.body = body
+        if use_layer_init:
+            self.fc = layer_init(nn.Linear(self.body.feature_dim, output_dim))
+        else:
+            self.fc = nn.Linear(self.body.feature_dim, output_dim)
+
+    def forward(self, *x):
+        return self.fc(self.body(torch.cat(x, -1)))
