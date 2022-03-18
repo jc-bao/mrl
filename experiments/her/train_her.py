@@ -51,15 +51,15 @@ def main(args):
     config.module_eval_env = EnvModule(
         env, num_envs=config.num_eval_envs, name='eval_env', seed=config.seed + 1138)
     # actor-critic
-    # config.actor = PytorchModel(
-    # 		'actor', lambda: Actor(FCBody(e.state_dim + e.goal_dim, args.layers, nn.LayerNorm), e.action_dim, e.max_action))
-    # config.critic = PytorchModel(
-    # 		'critic', lambda: Critic(FCBody(e.state_dim + e.goal_dim + e.action_dim, args.layers, nn.LayerNorm), 1))
     e = config.module_eval_env
-    config.actor = PytorchModel('actor', lambda: Actor(AttnBody(
-        14, 12, 3, 64, 2, 1), e.action_dim, e.max_action))
-    config.critic = PytorchModel('critic', lambda: Critic(AttnBody(
-        14+8, 12, 3, 64, 2, 1), 1))
+    config.actor = PytorchModel(
+    		'actor', lambda: Actor(FCBody(e.state_dim + e.goal_dim, args.layers, nn.LayerNorm), e.action_dim, e.max_action))
+    config.critic = PytorchModel(
+    		'critic', lambda: Critic(FCBody(e.state_dim + e.goal_dim + e.action_dim, args.layers, nn.LayerNorm), 1))
+    # config.actor = PytorchModel('actor', lambda: Actor(AttnBody(
+    #     14, 12, 3, 64, 2, 1), e.action_dim, e.max_action))
+    # config.critic = PytorchModel('critic', lambda: Critic(AttnBody(
+    #     14+8, 12, 3, 64, 2, 1), 1))
     # fix never done
     if e.goal_env:
         # NOTE: This is important in the standard Goal environments, which are never done

@@ -1,4 +1,4 @@
-import torch
+import torch, wandb
 import numpy as np
 import torch.nn.functional as F
 from copy import deepcopy
@@ -64,9 +64,6 @@ class DDPGPolicy(BasePolicy):
                 next_states, self.actor_target(next_states))
             target = (rewards + gammas * q_next)
             target = torch.clamp(target, *self.config.clip_target_range)
-
-        # if hasattr(self, 'logger') and self.config.opt_steps % 1000 == 0:
-        #     self.logger.add_histogram('Optimize/Target_q', target) TODO add logger
 
         q = self.critic(states, actions)
         critic_loss = F.mse_loss(q, target)
