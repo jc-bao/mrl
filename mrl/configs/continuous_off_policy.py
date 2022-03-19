@@ -175,31 +175,19 @@ def td3_config():
   return config
 
 
-def handover_config():
-  config = default_ddpg_config()
-  # update 
-  config.optimize_every = 100
-  config.optimize_times = 40
-  config.batch_size = 256
-  config.actor_lr = 1e-3
-  config.critic_lr = 1e-3
-  config.target_network_update_frac = 0.05
+def best_slide_config():
+  config = protoge_config()
+  config.batch_size = 1000
+  config.eexplore = 0.2
+  config.action_noise = 0.1
   config.grad_value_clipping = -1
-  # random
-  config.seed = 123
-  # replay
-  config.replay_size = int(64e6)
-  config.her = 'future_4'
-  # rl
-  config.gamma = 0.98
-  config.action_l2_regularization = 1
-  config.actor_weight_decay = 0.
-  config.target_network_update_freq = 40
-  config.warm_up = 2500
-  config.initial_explore = 5000
-  config.clip_target_range = (-50.,0.)
-  # explore
-  config.action_noise = 0.2
-  config.eexplore = 0.3
-  config.go_reset_percent = 0.
+  config.her = 'futureactual_2_2'
+  config.replay_size = int(2.5e6)
+  config.initial_explore = 10000
+  config.warm_up = 5000
+  config.action_l2_regularization = 1e-2
+  config.optimize_every = 2
+  config.target_network_update_freq = 10
+  config.activ = 'relu'
+  config.num_envs = 16
   return config

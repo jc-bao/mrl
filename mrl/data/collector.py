@@ -102,10 +102,10 @@ class Collector:
                 'Test/Discounted_episode_rewards': np.mean(discounted_episode_rewards), 
                 'Test/Episode_steps': np.mean(episode_steps)
             }, step = self.env_steps)
-        print(f'Evaluate: episode_rewards:{episode_rewards}, Success:{is_successes}')
+        print(f'Evaluate: episode_rewards:{np.mean(episode_rewards)}, Success:{np.mean(is_successes)}')
         return AttrDict(
-            rewards=episode_rewards,
-            steps=episode_steps
+            rewards=np.mean(episode_rewards),
+            steps=np.mean(episode_steps)
         )
 
 

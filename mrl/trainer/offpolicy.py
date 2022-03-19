@@ -20,11 +20,11 @@ if __name__ == '__main__':
     from attrdict import AttrDict
     config = AttrDict(
         max_steps=int(1e7),
-        epoch_len=int(1e5),
+        epoch_len=int(1e4),
         num_envs=16,
         seed=123,
         her='futureactual_2_2',  # TODO study the replay strategy
-        optimize_every=20,
+        optimize_every = 20,
         grad_norm_clipping=-1,
         grad_value_clipping=-1,
         policy_opt_noise=0,

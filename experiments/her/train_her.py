@@ -12,17 +12,13 @@ import numpy as np
 import torch
 import panda_gym
 
-config = best_slide_config()
-config.alg = 'ddpg'
-
-
-def main(args):
+def main(args, config):
     # parse args
     if args.num_envs is None:
         import multiprocessing as mp
         args.num_envs = max(mp.cpu_count() - 1, 1)
     args.num_eval_envs = args.num_envs
-    merge_args_into_config(args, config)
+    config = merge_args_into_config(args, config)
     if config.gamma < 1.:
         config.clip_target_range = (np.round(-(1 / (1 - config.gamma)), 2), 0.)
     if config.gamma == 1:
@@ -31,11 +27,21 @@ def main(args):
         config, ['env', 'her', 'seed', 'tb'], prefix=args.prefix)
 
     # setup modules
+    wandb_config = {
+        'project': 'debug',
+        'name': config.other_args['prefix'],
+        'id': None,
+        'resume': "allow",
+        'sync_tensorboard': True,
+        'monitor_gym': True,
+        'config': config
+    }
+    logger = Logger(wandb_config=wandb_config)
     config.update(
         dict(trainer=StandardTrain(),
              evaluation=EpisodicEval(),
              policy=ActorPolicy(),
-             logger=Logger(),
+             logger=logger,
              state_normalizer=Normalizer(MeanStdNormalizer()),
              replay=OnlineHERBuffer(),
              action_noise=ContinuousActionNoise(
@@ -45,7 +51,9 @@ def main(args):
     torch.set_num_interop_threads(min(4, args.num_envs))
     assert gym.envs.registry.env_specs.get(args.env) is not None
     # make env
-    def env(): return gym.make(args.env)
+
+    def env():
+        return gym.make(args.env)
     config.module_train_env = EnvModule(
         env, num_envs=config.num_envs, seed=config.seed)
     config.module_eval_env = EnvModule(
@@ -53,9 +61,9 @@ def main(args):
     # actor-critic
     e = config.module_eval_env
     config.actor = PytorchModel(
-    		'actor', lambda: Actor(FCBody(e.state_dim + e.goal_dim, args.layers, nn.LayerNorm), e.action_dim, e.max_action))
+        'actor', lambda: Actor(FCBody(e.state_dim + e.goal_dim, args.layers, nn.LayerNorm), e.action_dim, e.max_action))
     config.critic = PytorchModel(
-    		'critic', lambda: Critic(FCBody(e.state_dim + e.goal_dim + e.action_dim, args.layers, nn.LayerNorm), 1))
+        'critic', lambda: Critic(FCBody(e.state_dim + e.goal_dim + e.action_dim, args.layers, nn.LayerNorm), 1))
     # config.actor = PytorchModel('actor', lambda: Actor(AttnBody(
     #     14, 12, 3, 64, 2, 1), e.action_dim, e.max_action))
     # config.critic = PytorchModel('critic', lambda: Critic(AttnBody(
@@ -96,7 +104,7 @@ if __name__ == '__main__':
                                      formatter_class=lambda prog: argparse.RawTextHelpFormatter(prog, max_help_position=100, width=120))
     parser.add_argument('--parent_folder', default='./results',
                         type=str, help='where to save progress')
-    parser.add_argument('--prefix', type=str, default='her',
+    parser.add_argument('--prefix', type=str, default='wandbtest01',
                         help='Prefix for agent name (subfolder where it is saved)')
     parser.add_argument('--env', default="FetchReach-v1",
                         type=str, help="gym environment")
@@ -108,10 +116,11 @@ if __name__ == '__main__':
                         help='a tag for the agent name / tensorboard')
     parser.add_argument('--epoch_len', default=5000, type=int,
                         help='number of steps between evals')
-    parser.add_argument('--num_envs', default=None, type=int,
-                        help='number of envs (defaults to procs - 1)')
     parser.add_argument('--env_max_step', default=50,
                         type=int, help='max_steps_env_environment')
+
+    config = best_slide_config()
+    config.alg = 'ddpg'
 
     parser = add_config_args(parser, config)
     args = parser.parse_args()
@@ -121,4 +130,4 @@ if __name__ == '__main__':
     args.launch_command = sys.argv[0] + ' ' + \
         subprocess.list2cmdline(sys.argv[1:])
 
-    main(args)
+    main(args, config)
