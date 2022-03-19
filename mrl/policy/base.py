@@ -10,6 +10,7 @@ class BasePolicy(ABC, nn.Module):
     def update(self, sample_size, buffer): # TODO ignore warmup
         states, actions, rewards, next_states, gammas = buffer.sample(sample_size)
         self.learn(states, actions, rewards, next_states, gammas)
+        self.optimize_times += 1
 
     def torch(self, x):
         if isinstance(x, torch.Tensor): return x

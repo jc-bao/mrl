@@ -1,35 +1,43 @@
 import numpy as np
 from tqdm import tqdm
+import logging
+
 
 def offpolicy_trainer(policy, collector, config):
     config.num_epoch = int(config.max_steps // config.epoch_len)
+    logging.debug('start warm up')
     collector.collect(num_steps=config.warm_up)  # warm up
     for epoch in range(config.num_epoch):  # TODO add tqdm
         config.num_cycles = int(config.epoch_len//config.num_envs)
         for cycle in tqdm(range(config.num_cycles)):
             # collect
+            logging.debug(f'start collect {config.num_envs} steps')
             collector.collect(num_steps=config.num_envs)
             # train TODO optimize every to update per step
             update_times = collector.env_steps//config.optimize_every - policy.optimize_times
+            logging.debug(f'start update {update_times} times')
             for _ in range(update_times):
                 policy.update(config.batch_size, collector.buffer)
-        collector.eval(num_epochs = config.num_eval_epochs)
+        logging.debug(f'start evaluate {config.num_eval_epochs} epochs')
+        collector.eval(num_epochs=config.num_eval_epochs)
+
 
 # test block
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.ERROR)
     from attrdict import AttrDict
     config = AttrDict(
         max_steps=int(1e7),
-        epoch_len=int(1e4),
+        epoch_len=int(1e5),
         num_envs=16,
-        seed=123,
-        her='futureactual_2_2',  # TODO study the replay strategy
-        optimize_every = 20,
+        seed=0,
+        her='future_4',  # TODO study the replay strategy
+        optimize_every=20,
         grad_norm_clipping=-1,
         grad_value_clipping=-1,
         policy_opt_noise=0,
         # update
-        num_eval_epochs = 80, 
+        num_eval_epochs=80,
         # rl
         gamma=0.98,
         n_step_returns=1,
@@ -65,7 +73,7 @@ if __name__ == '__main__':
         goal_dim=3,
         never_done=True,
         # wandb
-        wandb=True
+        wandb=False
     )
     from mrl.policy import DDPGPolicy
     from mrl.data import Collector, Buffer
@@ -73,9 +81,9 @@ if __name__ == '__main__':
     from mrl.utils.networks import FCBody, Actor, Critic
     from torch import nn
     import torch
-    import wandb
+    # import wandb
 
-    wandb.init(project='debug', name='new lib debug')
+    # wandb.init(project='debug', name='new lib debug')
 
     def make_env():
         import gym

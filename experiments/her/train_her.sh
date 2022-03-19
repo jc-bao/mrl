@@ -1,1 +1,1 @@
-PYTHONPATH=../../ python train_her.py --env PandaRearrangeBimanual-v0 --num_envs 16 --parent_folder ./results --her future_4 --prefix interval20_new --optimize_every 20 --max_steps 10000000
+PYTHONPATH=../../ python train_her.py --env PandaRearrangeBimanual-v0 --num_envs 16 --parent_folder ./results --her future_4 --prefix interval20_02inhand --optimize_every 20 --max_steps 10000000
