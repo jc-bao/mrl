@@ -73,22 +73,24 @@ if __name__ == '__main__':
         goal_dim=3,
         never_done=True,
         # wandb
-        wandb=False
+        wandb=True
     )
     from mrl.policy import DDPGPolicy
     from mrl.data import Collector, Buffer
     from mrl.modules.env import EnvModule
     from mrl.utils.networks import FCBody, Actor, Critic
+    from mrl.utils.logger import WandbLogger
     from torch import nn
     import torch
-    # import wandb
-
-    # wandb.init(project='debug', name='new lib debug')
 
     def make_env():
         import gym
         import panda_gym
         return gym.make('PandaRearrangeBimanual-v0')
+    if config.wandb:
+        logger = WandbLogger(config)
+    else:
+        logger = None
     env = EnvModule(make_env, num_envs=config.num_envs, seed=config.seed)
     config.compute_reward = env.compute_reward
     config.action_space = env.action_space
@@ -101,6 +103,6 @@ if __name__ == '__main__':
     critic_opt = torch.optim.Adam(critic.parameters(), lr=config.critic_lr,
                                   weight_decay=config.critic_weight_decay)
     buffer = Buffer(config, env)
-    policy = DDPGPolicy(config, actor, actor_opt, critic, critic_opt, buffer)
-    collector = Collector(policy, env, buffer, config)
+    policy = DDPGPolicy(config, actor, actor_opt, critic, critic_opt, buffer, logger = logger)
+    collector = Collector(policy, env, buffer, config, logger = logger)
     offpolicy_trainer(policy, collector, config)

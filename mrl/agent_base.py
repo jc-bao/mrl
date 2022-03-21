@@ -89,6 +89,7 @@ class Agent():
     """Calls the _process_experience function of each relevant module
     (typically, these will include a replay buffer and one or more logging modules)"""
     self.config.env_steps += self.env.num_envs if hasattr(self, 'env') else 1
+    print(self.config.env_steps)
     for module in self._process_experience_registry:
       module._process_experience(experience)
 

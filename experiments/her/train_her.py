@@ -30,12 +30,17 @@ def main(args):
     config.agent_name = make_agent_name(
         config, ['env', 'her', 'seed', 'tb'], prefix=args.prefix)
 
+    wandb_config = {
+        'project': 'debug',
+        'name': 'baseline', 
+        'sync_tensorboard': True
+    }
     # setup modules
     config.update(
         dict(trainer=StandardTrain(),
              evaluation=EpisodicEval(),
              policy=ActorPolicy(),
-             logger=Logger(),
+             logger=Logger(wandb_config=wandb_config),
              state_normalizer=Normalizer(MeanStdNormalizer()),
              replay=OnlineHERBuffer(),
              action_noise=ContinuousActionNoise(

@@ -63,9 +63,13 @@ class StochasticActorPolicy(mrl.Module):
             'actor', 'env', 'replay_buffer'
         ],
         locals=locals())
+    self.soft_update_times = 0
+    self.update_times = 0
 
   def _setup(self):
     self.use_actor_target = self.config.get('use_actor_target')
+    self.soft_update_times = 0
+    self.update_times = 0
 
   def __call__(self, state, greedy=False):
     action_scale = self.env.max_action
@@ -166,6 +170,11 @@ class OffPolicyActorCritic(mrl.Module):
 
     self.action_scale = self.env.max_action
 
+    self.soft_update_times = 0
+    self.update_times = 0
+    self.actor_loss_buffer = np.array([])
+    self.critic_loss_buffer = np.array([])
+
   def save(self, save_folder : str):
     path = os.path.join(save_folder, self.module_name + '.pt')
     torch.save({
@@ -189,6 +198,9 @@ class OffPolicyActorCritic(mrl.Module):
       if self.config.opt_steps % self.config.target_network_update_freq == 0:
         for target_model, model in self.targets_and_models:
           soft_update(target_model, model, self.config.target_network_update_frac)
+        self.soft_update_times += 1
+
+    self.update_times += 1
 
   def optimize_from_batch(self, states, actions, rewards, next_states, gammas):
     raise NotImplementedError('Subclass this!')
@@ -251,6 +263,16 @@ class DDPG(OffPolicyActorCritic):
 
     for p in self.critic_params:
       p.requires_grad = True
+
+    self.actor_loss_buffer = np.append(self.actor_loss_buffer, [self.numpy(actor_loss)])
+    self.critic_loss_buffer = np.append(self.critic_loss_buffer, [self.numpy(critic_loss)])
+    if hasattr(self, 'logger') and self.actor_loss_buffer.shape[0] > 1000:
+      self.logger.add_scalar(tag='actor loss', value=np.mean(self.actor_loss_buffer), step=self.config.env_steps)
+      self.logger.add_scalar(tag='critic loss', value=np.mean(self.critic_loss_buffer), step=self.config.env_steps)
+      self.logger.add_scalar(tag='update times', value=self.update_times, step = self.config.env_steps)
+      self.logger.add_scalar(tag='soft update times', value=self.soft_update_times, step=self.config.env_steps)
+      self.actor_loss_buffer = np.array([])
+      self.critic_loss_buffer = np.array([])
 
 
 class TD3(OffPolicyActorCritic):

@@ -1,16 +1,24 @@
 import torch
 from torch import nn
+import wandb
 from abc import ABC, abstractmethod
 
 class BasePolicy(ABC, nn.Module):
-    def __init__(self) -> None:
+    def __init__(self, config, logger = None) -> None:
         super().__init__()
+        self.config = config
+        self.logger = logger
         self.optimize_times = 0
 
     def update(self, sample_size, buffer): # TODO ignore warmup
         states, actions, rewards, next_states, gammas = buffer.sample(sample_size)
-        self.learn(states, actions, rewards, next_states, gammas)
+        result = self.learn(states, actions, rewards, next_states, gammas)
         self.optimize_times += 1
+        if not self.logger is None:
+            self.logger.log({
+                **result,
+                'Train/Optimize Times': self.optimize_times
+            })
 
     def torch(self, x):
         if isinstance(x, torch.Tensor): return x
