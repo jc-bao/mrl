@@ -2,14 +2,15 @@ import torch
 import numpy as np
 import torch.nn.functional as F
 from copy import deepcopy
+import logging
 
 from mrl.policy import BasePolicy
 from mrl.utils import GaussianProcess, ConstantSchedule
 
 
 class DDPGPolicy(BasePolicy):
-	def __init__(self, config, actor, actor_opt, critic, critic_opt, replay_buffer, logger=None) -> None:
-		super().__init__(config, logger)
+	def __init__(self, config, actor, actor_opt, critic, critic_opt, replay_buffer, normalizer = None , logger=None) -> None:
+		super().__init__(config,normalizer,logger)
 		# parameters
 		self.config = config
 		self.optimize_times = 0
@@ -28,7 +29,7 @@ class DDPGPolicy(BasePolicy):
 		# noise
 		self.random_process = GaussianProcess(
 			size=(self.config.num_envs, self.config.action_dim,),
-			std=ConstantSchedule(config.action_noise))
+			std=ConstantSchedule(config.action_noise))	
 		# tmp need remove!
 		self.replay_buffer = replay_buffer
 
@@ -42,8 +43,8 @@ class DDPGPolicy(BasePolicy):
 				state = self.ag_curiosity.relabel_state(state)
 		# normalize
 		state = flatten_state(state)  # flatten goal environments
-		if hasattr(self, 'state_normalizer'):
-			state = self.state_normalizer(state, update=self.training)
+		if not self.normalizer is None:
+			state = self.normalizer(state, update=self.training)
 		# get action
 		state = self.torch(state)
 		action = self.numpy(self.actor(state))
@@ -142,7 +143,6 @@ class DDPGPolicy(BasePolicy):
 			n_envs = self.config.num_envs
 			factor = np.arange(0., 1. + (1./n_envs), 1. /
 												 (n_envs-1)).reshape(n_envs, 1)
-
 		return act + (self.random_process.sample() * self.config.max_action * factor)[:len(act)]
 
 

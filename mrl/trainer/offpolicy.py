@@ -1,9 +1,10 @@
 import numpy as np
+from torch import normal
 from tqdm import tqdm
 import logging
 
 
-def offpolicy_trainer(policy, collector, config):
+def offpolicy_trainer(config, policy, collector):
     config.num_epoch = int(config.max_steps // config.epoch_len)
     logging.debug('start warm up')
     collector.collect(num_steps=config.warm_up)  # warm up
@@ -24,7 +25,7 @@ def offpolicy_trainer(policy, collector, config):
 
 # test block
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.ERROR)
+    logging.basicConfig(level=logging.WARN)
     from attrdict import AttrDict
     config = AttrDict(
         max_steps=int(1e7),
@@ -80,6 +81,7 @@ if __name__ == '__main__':
     from mrl.modules.env import EnvModule
     from mrl.utils.networks import FCBody, Actor, Critic
     from mrl.utils.logger import WandbLogger
+    from mrl.utils.normalizer import MeanStdNormalizer
     from torch import nn
     import torch
 
@@ -103,6 +105,7 @@ if __name__ == '__main__':
     critic_opt = torch.optim.Adam(critic.parameters(), lr=config.critic_lr,
                                   weight_decay=config.critic_weight_decay)
     buffer = Buffer(config, env)
-    policy = DDPGPolicy(config, actor, actor_opt, critic, critic_opt, buffer, logger = logger)
-    collector = Collector(policy, env, buffer, config, logger = logger)
-    offpolicy_trainer(policy, collector, config)
+    normalizer = MeanStdNormalizer(read_only=False)
+    policy = DDPGPolicy(config, actor, actor_opt, critic, critic_opt, buffer, normalizer = normalizer, logger = logger)
+    collector = Collector(config, policy, env, buffer, logger = logger)
+    offpolicy_trainer(config, policy, collector)

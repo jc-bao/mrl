@@ -6,7 +6,7 @@ import torch
 
 
 class Collector:
-  def __init__(self, policy, env, buffer, config, logger=None) -> None:
+  def __init__(self, config, policy, env, buffer, logger=None) -> None:
     self.policy = policy
     self.env = env
     self.buffer = buffer
