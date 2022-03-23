@@ -21,6 +21,16 @@ class ActorPolicy(mrl.Module):
     self.use_actor_target = self.config.get('use_actor_target')
 
   def __call__(self, state, greedy=False):
+    """_summary_
+    1. the relabel are done by the policy
+
+    Args:
+        state (_type_): _description_
+        greedy (bool, optional): _description_. Defaults to False.
+
+    Returns:
+        _type_: _description_
+    """
     action_scale = self.env.max_action
 
     # relabel state
@@ -46,6 +56,7 @@ class ActorPolicy(mrl.Module):
       if self.config.get('eexplore'):
         eexplore = self.config.eexplore
         if hasattr(self, 'ag_curiosity'):
+          # go_eexplore: extra episilon  go_explore: if use extra 
           eexplore = self.ag_curiosity.go_explore * self.config.go_eexplore + eexplore
         mask = (np.random.random((action.shape[0], 1)) < eexplore).astype(np.float32)
         randoms = np.random.random(action.shape) * (2 * action_scale) - action_scale

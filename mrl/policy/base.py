@@ -19,8 +19,9 @@ class BasePolicy(ABC, nn.Module):
     states, actions, rewards, next_states, gammas = buffer.sample(
       sample_size, to_torch=False)
     if not self.normalizer is None:
-        states = self.normalizer(states, update=False).astype(np.float32)
-        next_states = self.normalizer(next_states, update=False).astype(np.float32)
+      states = self.normalizer(states, update=False).astype(np.float32)
+      next_states = self.normalizer(
+        next_states, update=False).astype(np.float32)
     states, actions, rewards, next_states, gammas = (self.torch(states), self.torch(actions),
                                                      self.torch(rewards), self.torch(
                                                        next_states),

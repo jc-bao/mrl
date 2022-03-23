@@ -26,56 +26,57 @@ def offpolicy_trainer(config, policy, collector):
 # test block
 if __name__ == '__main__':
     logging.basicConfig(level=logging.WARN)
-    from attrdict import AttrDict
-    config = AttrDict(
-        max_steps=int(1e7),
-        epoch_len=int(1e5),
-        num_envs=16,
-        seed=0,
-        her='future_4',  # TODO study the replay strategy
-        optimize_every=20,
-        grad_norm_clipping=-1,
-        grad_value_clipping=-1,
-        policy_opt_noise=0,
-        # update
-        num_eval_epochs=80,
-        # rl
-        gamma=0.98,
-        n_step_returns=1,
-        # buffer
-        replay_size=int(2.5e6),
-        # update
-        batch_size=1000,
-        actor_lr=1e-3,
-        critic_lr=1e-3,
-        target_network_update_freq=10,
-        target_network_update_frac=0.05,
-        # network
-        layers=[512, 512, 512],
-        actor_weight_decay=0,
-        critic_weight_decay=0,
-        device='cuda',
-        clip_target_range=[-50, 0],
-        action_l2_regularization=1e-2,
-        # explore
-        warm_up=4096,
-        eexplore=0.2,
-        initial_explore=10000,
-        future_warm_up=25000,
-        varied_action_noise=False,
-        action_noise=0.1,
-        # reward
-        sparse_reward_shaping=False,
-        slot_based_state=False,  # CHECK
-        # env
-        max_action=1,
-        action_dim=8,
-        state_dim=26,
-        goal_dim=3,
-        never_done=True,
-        # wandb
-        wandb=True
-    )
+    from mrl.configs import get_config
+    config = get_config('debug')
+    # config = AttrDict(
+    #     max_steps=int(1e7),
+    #     epoch_len=int(1e5),
+    #     num_envs=16,
+    #     seed=0,
+    #     her='future_4',  # TODO study the replay strategy
+    #     optimize_every=20,
+    #     grad_norm_clipping=-1,
+    #     grad_value_clipping=-1,
+    #     policy_opt_noise=0,
+    #     # update
+    #     num_eval_epochs=80,
+    #     # rl
+    #     gamma=0.98,
+    #     n_step_returns=1,
+    #     # buffer
+    #     replay_size=int(2.5e6),
+    #     # update
+    #     batch_size=1000,
+    #     actor_lr=1e-3,
+    #     critic_lr=1e-3,
+    #     target_network_update_freq=10,
+    #     target_network_update_frac=0.05,
+    #     # network
+    #     layers=[512, 512, 512],
+    #     actor_weight_decay=0,
+    #     critic_weight_decay=0,
+    #     device='cuda',
+    #     clip_target_range=[-50, 0],
+    #     action_l2_regularization=1e-2,
+    #     # explore
+    #     warm_up=4096,
+    #     eexplore=0.2,
+    #     initial_explore=10000,
+    #     future_warm_up=25000,
+    #     varied_action_noise=False,
+    #     action_noise=0.1,
+    #     # reward
+    #     sparse_reward_shaping=False,
+    #     slot_based_state=False,  # CHECK
+    #     # env
+    #     max_action=1,
+    #     action_dim=8,
+    #     state_dim=26,
+    #     goal_dim=3,
+    #     never_done=True,
+    #     # wandb
+    #     wandb=True
+    # )
     from mrl.policy import DDPGPolicy
     from mrl.data import Collector, Buffer
     from mrl.modules.env import EnvModule

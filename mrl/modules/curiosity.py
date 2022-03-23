@@ -51,13 +51,21 @@ class AchievedGoalCuriosity(mrl.Module):
     self.cutoff = self.min_cutoff
 
     # go explore + success accounting
+    # if enable random explore when env is done
     self.go_explore = np.zeros((self.n_envs, 1), dtype=np.float32)
     self.is_success = np.zeros((self.n_envs, 1), dtype=np.float32)
     self.successes_deque = deque(maxlen=10)  # for dynamic cutoff
     self.successes = []
 
   def _manage_resets_and_success_behaviors(self, experience, close):
-    """ Manage (1) end of trajectory, (2) early resets, (3) go explore and overshot goals """
+    """ Manage (1) end of trajectory, (2) early resets, (3) go explore and overshot goals 
+    Args:
+      - experience: over means reach the time limit
+      - close: if success  
+    Return: 
+      - reset_idxs: indices of envs that need to be reset
+      - overshooting_idxs: indices of envs that need to be overshot
+    """
     reset_idxs, overshooting_idxs, overshooting_proposals = [], [], []
 
     for i, over in enumerate(experience.trajectory_over):
@@ -81,6 +89,13 @@ class AchievedGoalCuriosity(mrl.Module):
     return reset_idxs, overshooting_idxs, np.array(overshooting_proposals)
 
   def _overshoot_goals(self, experience, overshooting_idxs, overshooting_proposals):
+    """_summary_
+
+    Args:
+        experience (_type_): _description_
+        overshooting_idxs (_type_): _description_
+        overshooting_proposals (_type_): _description_
+    """
     #score the proposals
     num_proposals = overshooting_proposals.shape[1]
     num_idxs = len(overshooting_idxs)
@@ -126,8 +141,10 @@ class AchievedGoalCuriosity(mrl.Module):
 
     # First, manage the episode resets & any special behavior that occurs on goal achievement, like go explore / resets / overshooting
     reset_idxs, overshooting_idxs, overshooting_proposals = self._manage_resets_and_success_behaviors(experience, close)
+    # if reset, not replace
     if reset_idxs:
       self.train.reset_next(reset_idxs)
+    # update self.current_goals
     if overshooting_idxs and len(ag_buffer):
       self._overshoot_goals(experience, overshooting_idxs, overshooting_proposals)
 
