@@ -1,4 +1,5 @@
 # 1. Imports
+from multiprocessing.sharedctypes import SynchronizedBase
 from mrl.import_all import *
 from mrl.modules.train import debug_vectorized_experience
 from experiments.mega.make_env import make_env
@@ -14,6 +15,8 @@ config = protoge_config()
 # 3. Make changes to the argparse below
 
 def main(args):
+  import wandb
+  wandb.init(project='debug', name='omega_handover_default', sync_tensorboard=True)
 
   # 4. Update the config with args, and make the agent name. 
   if args.num_envs is None:
@@ -258,5 +261,4 @@ if __name__ == '__main__':
 
   import subprocess, sys
   args.launch_command = sys.argv[0] + ' ' + subprocess.list2cmdline(sys.argv[1:])
-
   main(args)

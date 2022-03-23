@@ -103,6 +103,11 @@ def make_env(args):
   elif args.env.lower()=='pushleft_pushleft':
       env_fn = lambda: PushLeft()
       eval_env_fn = lambda: PushLeft()
+  elif args.env == 'PandaRearrangeBimanual-v0':
+    def env_fn():
+      import panda_gym
+      return gym.make('PandaRearrangeBimanual-v0')
+    eval_env_fn = env_fn
   else:
     env, external, internal = args.env.split('_')
     if external.lower() == 'all':

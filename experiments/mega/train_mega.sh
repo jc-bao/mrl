@@ -1,0 +1,1 @@
+PYTHONPATH=../../ python train_mega.py --env PandaRearrangeBimanual-v0 --tb OMEGA --max_steps 5000000 --seed 111 --ag_curiosity minkde --replay_size 5000000 --save_embeddings  --transition_to_dg --optimize_every 4 --her rfaab_1_5_2_1_1

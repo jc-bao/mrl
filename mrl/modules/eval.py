@@ -1,4 +1,4 @@
-impor mrl
+import mrl
 from mrl.utils.misc import AttrDict
 import numpy as np
 
