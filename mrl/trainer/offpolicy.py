@@ -33,7 +33,7 @@ if __name__ == '__main__':
 	logging.basicConfig(level=logging.WARN)
 	logging.debug('finish import')
 
-	config = get_config('handover')
+	config = get_config('debug')
 	def make_env():
 		import gym
 		import panda_gym
@@ -46,7 +46,6 @@ if __name__ == '__main__':
 	env = EnvModule(make_env, num_envs=config.num_envs, seed=config.seed)
 	eval_env = EnvModule(make_env, num_envs=config.num_eval_envs, seed=config.seed) 
 	logging.debug('env create done.')
-	config.compute_reward = env.compute_reward
 	config.action_space = env.action_space
 	actor = Actor(FCBody(config.state_dim + config.goal_dim, config.layers,
 								nn.LayerNorm), config.action_dim, config.max_action).to(config.device)
@@ -56,7 +55,9 @@ if __name__ == '__main__':
 									config.action_dim, config.layers, nn.LayerNorm), 1).to(config.device)
 	critic_opt = torch.optim.Adam(critic.parameters(), lr=config.critic_lr,
 																weight_decay=config.critic_weight_decay)
-	buffer = HERBuffer(config)
+	buffer = HERBuffer(replay_size=config.replay_size, future_warm_up=config.future_warm_up,
+	env_params=config.env_params, her_params=config.her_params, reward_fn = env.compute_reward,
+	device = config.device)
 	logging.debug('buffer create done.')
 	normalizer = MeanStdNormalizer(read_only=False)
 	policy = DDPGPolicy(config, actor, actor_opt, critic,

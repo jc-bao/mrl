@@ -1,38 +1,43 @@
 # TODO fix shared memory buffer
-from xml.dom.minidom import Attr
-from mrl.data.buffer.base import BaseBuffer, RingBuffer, BufferManager
+from typing import Callable
+from mrl.data.buffer.base import BufferManager
 import numpy as np
 import torch
 from attrdict import AttrDict
-
-from mrl.replays.core.shared_buffer import achieved_samples
 
 
 class HERBuffer():
 
   def __init__(
       self,
-      config: AttrDict,
+      replay_size: int,
+      future_warm_up: int,
+      env_params: AttrDict,
+      her_params: AttrDict,
+      reward_fn: Callable,
+      device: str, 
   ):
     """
     Buffer that does online hindsight relabeling.
     Replaces the old combo of ReplayBuffer + HERBuffer.
     """
-    self.config = config
-    self.size = self.config.replay_size
-    self.max_env_steps = config.max_env_steps
-    self.future_warm_up = self.config.future_warm_up
+    self.size = replay_size
+    self.env_params = env_params
+    self.her_params = her_params
+    self.reward_fn = reward_fn
+    self.future_warm_up = future_warm_up
+    self.device = device
     # TODO manage sub buffers directly from here
     self.basic_item_shapes = AttrDict(
-      state=(config.state_dim, np.float32),
-      action=(config.action_dim, np.float32),
-      next_state=(config.state_dim, np.float32),
+      state=(env_params.state_dim, np.float32),
+      action=(env_params.action_dim, np.float32),
+      next_state=(env_params.state_dim, np.float32),
       reward=(1, np.float32),
       done=(1, np.bool8),
-      previous_ag=(config.goal_dim, np.float32),
-      ag=(config.goal_dim, np.float32),
-      bg=(config.goal_dim, np.float32),
-      dg=(config.goal_dim, np.float32),
+      previous_ag=(env_params.goal_dim, np.float32),
+      ag=(env_params.goal_dim, np.float32),
+      bg=(env_params.goal_dim, np.float32),
+      dg=(env_params.goal_dim, np.float32),
     )
     self.extra_item_shapes = AttrDict(
       tidx=(1, np.int32),
@@ -43,14 +48,9 @@ class HERBuffer():
     self.buffers = BufferManager(self.size, self.basic_item_shapes)
     self.extra_info = BufferManager(self.size, self.extra_item_shapes)
 
-    self.num_envs = self.config.num_envs
     # TODO make reset smart
     self._subbuffers = [BufferManager(
-      limit=self.max_env_steps, items_shape=self.basic_item_shapes) for _ in range(self.num_envs)]
-
-    # HER mode can differ if demo or normal replay buffer TODO change to params, try random goals
-    self.fut, self.act, self.ach, self.beh = parse_hindsight_mode(
-      self.config.her)
+      limit=self.env_params.max_env_steps, items_shape=self.basic_item_shapes) for _ in range(self.env_params.num_envs)]
 
     self.current_trajectory = 0
 
@@ -59,30 +59,22 @@ class HERBuffer():
     reward = np.expand_dims(exp.reward, 1)  # format for replay buffer
     action = exp.action
     # TODO change env protocal to make store more easy
-    transitions = []
-    for i in range(self.num_envs):
-      transitions.append(
-        AttrDict(
-          state=exp.state['observation'][i],
-          action=action[i],
-          reward=reward[i],
-          done=done[i],
-          next_state=exp.next_state['observation'][i],
-          previous_ag=exp.state['achieved_goal'][i],
-          ag=exp.next_state['achieved_goal'][i],
-          dg=exp.state['desired_goal'][i],
-          bg=exp.next_state['desired_goal'][i],
-        ))
+    transitions = [AttrDict(
+      state=exp.state['observation'][i],
+      action=action[i],
+      reward=reward[i],
+      done=done[i],
+      next_state=exp.next_state['observation'][i],
+      previous_ag=exp.state['achieved_goal'][i],
+      ag=exp.next_state['achieved_goal'][i],
+      dg=exp.state['desired_goal'][i],
+      bg=exp.next_state['desired_goal'][i],
+    ) for i in range(self.env_params.num_envs)]
     if hasattr(self, 'ag_curiosity') and self.ag_curiosity.current_goals is not None:
       raise NotImplementedError
-      # behavioral = self.ag_curiosity.current_goals
-      # # recompute online reward
-      # reward = self.env.compute_reward(
-      #   ag, behavioral, {'s': state, 'ns': next_state}).reshape(-1, 1)
-    else:  # TODO add curiosity back (move it to env)
-      for i in range(self.num_envs):
-        self._subbuffers[i].add(transitions[i])
-    for i in range(self.num_envs):
+    for i in range(self.env_params.num_envs):
+      self._subbuffers[i].add(transitions[i])
+    for i in range(self.env_params.num_envs):
       if exp.trajectory_over[i]:
         items = self._subbuffers[i].get_all()
         trajectory_len = len(items.reward)
@@ -92,13 +84,13 @@ class HERBuffer():
           self.current_trajectory,
           tleft=np.arange(trajectory_len, dtype=np.int32)[::-1, np.newaxis],
           # TODO to judge success smartly
-          success=np.ones((trajectory_len, 1), dtype=np.bool8) * \
+          success=np.ones((trajectory_len, 1), dtype=np.bool8) *
           np.any(np.isclose(items.reward, 0.))
         )
         self.extra_info.append_batch(extra_info)
         self.current_trajectory += 1
         self._subbuffers[i] = BufferManager(
-          limit=self.max_env_steps, items_shape=self.basic_item_shapes)
+          limit=self.env_params.max_env_steps, items_shape=self.basic_item_shapes)
 
   def sample(self, batch_size, to_torch=True):
     if hasattr(self, 'prioritized_replay'):
@@ -114,11 +106,13 @@ class HERBuffer():
       trans.reward = self.goal_reward(
         trans.ag, trans.replay_goal, {'s': trans.state, 'ns': trans.next_state}).reshape(-1, 1).astype(np.float32)
     else:
-      trans.reward = self.config.compute_reward(trans.ag, trans.replay_goal, {'s': trans.state, 'ns': trans.next_state}).reshape(-1, 1).astype(np.float32)
+      trans.reward = self.reward_fn(trans.ag, trans.replay_goal, {
+        's': trans.state, 'ns': trans.next_state}).reshape(-1, 1).astype(np.float32)
 
     trans.state = np.concatenate((trans.state, trans.replay_goal), -1)
-    trans.next_state = np.concatenate((trans.next_state, trans.replay_goal), -1)
-    gammas = self.config.gamma * (1.-trans.done)
+    trans.next_state = np.concatenate(
+      (trans.next_state, trans.replay_goal), -1)
+    masks = (1.-trans.done)
 
     # TODO move normalizer to buffer
     if hasattr(self, 'state_normalizer'):
@@ -131,28 +125,31 @@ class HERBuffer():
     if to_torch:
       return (self.torch(trans.state), self.torch(trans.action),
               self.torch(trans.reward), self.torch(trans.next_state),
-              self.torch(gammas))
+              self.torch(masks))
     else:
-      return (trans.state, trans.action, trans.reward, trans.next_state, gammas)
+      return (trans.state, trans.action, trans.reward, trans.next_state, masks)
 
-  def change_replay_goals(self, trans: AttrDict , batch_idxs: np.ndarray):
+  def change_replay_goals(self, trans: AttrDict, batch_idxs: np.ndarray):
     # get goal size
     if len(self.buffers) > self.future_warm_up:
       fut_batch_size, act_batch_size, ach_batch_size, beh_batch_size, real_batch_size = np.random.multinomial(
-        len(batch_idxs), [self.fut, self.act, self.ach, self.beh, 1.])
+        len(batch_idxs), [self.her_params.fut, self.her_params.act, self.her_params.ach, self.her_params.beh, 1.])
     else:
-      fut_batch_size, act_batch_size, ach_batch_size, beh_batch_size, real_batch_size = len(batch_idxs), 0, 0, 0, 0
-
-    fut_local_idxs, act_local_idxs, ach_local_idxs , beh_local_idxs  = local_idxs = np.cumsum([fut_batch_size, act_batch_size, ach_batch_size, beh_batch_size])
-
+      fut_batch_size, act_batch_size, ach_batch_size, beh_batch_size, real_batch_size = len(
+        batch_idxs), 0, 0, 0, 0
+    fut_local_idxs, act_local_idxs, ach_local_idxs, beh_local_idxs = np.cumsum(
+      [fut_batch_size, act_batch_size, ach_batch_size, beh_batch_size])
+    assert real_batch_size == len(batch_idxs) - beh_local_idxs
     # assign actual goals
-    trans.replay_goal = trans.bg    
-    
+    trans.replay_goal = trans.bg
+
     # sample future goals
     if fut_batch_size > 0:
       fut_idxs = batch_idxs[:fut_local_idxs]
-      tlefts = self.extra_info[fut_idxs].tleft.flatten()
-      future_achieved_idx = fut_idxs + np.round(np.random.uniform(size=len(fut_idxs)) * tlefts).astype(np.int32)
+      tlefts = self.extra_info.tleft[fut_idxs].flatten()
+      future_achieved_idx = fut_idxs + \
+        np.round(np.random.uniform(size=len(fut_idxs))
+                 * tlefts).astype(np.int32)
       trans.replay_goal[:fut_local_idxs] = self.buffers.ag[future_achieved_idx]
 
     # sample random desired(actual) goal goals
@@ -167,7 +164,6 @@ class HERBuffer():
     if beh_batch_size > 0:
       trans.replay_goal[ach_local_idxs:beh_local_idxs] = self.buffers.bg[
         np.random.randint(len(self.buffers), size=beh_batch_size)]
-
     return trans
 
   def __len__(self):
@@ -176,62 +172,45 @@ class HERBuffer():
   def torch(self, x):
     if isinstance(x, torch.Tensor):
       return x
-    return torch.FloatTensor(x).to(self.config.device)
+    return torch.FloatTensor(x).to(self.device)
 
   def numpy(self, x):
     return x.cpu().detach().numpy()
 
 
-def parse_hindsight_mode(hindsight_mode: str):
-  """setup relabel mode.
-  fut: future version
-  act: 
-
-  Args:
-      hindsight_mode (str): _description_
-
-  Returns:
-      _type_: _description_
-  """
-  if 'future_' in hindsight_mode:
-    _, fut = hindsight_mode.split('_')
-    fut = float(fut) / (1. + float(fut))
-    act = 0.
-    ach = 0.
-    beh = 0.
-  elif 'futureactual_' in hindsight_mode:
-    _, fut, act = hindsight_mode.split('_')
-    non_hindsight_frac = 1. / (1. + float(fut) + float(act))
-    fut = float(fut) * non_hindsight_frac
-    act = float(act) * non_hindsight_frac
-    ach = 0.
-    beh = 0.
-  elif 'futureachieved_' in hindsight_mode:
-    _, fut, ach = hindsight_mode.split('_')
-    non_hindsight_frac = 1. / (1. + float(fut) + float(ach))
-    fut = float(fut) * non_hindsight_frac
-    act = 0.
-    ach = float(ach) * non_hindsight_frac
-    beh = 0.
-  elif 'rfaa_' in hindsight_mode:
-    _, real, fut, act, ach = hindsight_mode.split('_')
-    denom = (float(real) + float(fut) + float(act) + float(ach))
-    fut = float(fut) / denom
-    act = float(act) / denom
-    ach = float(ach) / denom
-    beh = 0.
-  elif 'rfaab_' in hindsight_mode:
-    _, real, fut, act, ach, beh = hindsight_mode.split('_')
-    denom = (float(real) + float(fut) +
-             float(act) + float(ach) + float(beh))
-    fut = float(fut) / denom
-    act = float(act) / denom
-    ach = float(ach) / denom
-    beh = float(beh) / denom
-  else:
-    fut = 0.
-    act = 0.
-    ach = 0.
-    beh = 0.
-
-  return fut, act, ach, beh
+if __name__ == '__main__':
+  env_params = AttrDict(
+    num_envs=1,
+    state_dim=2,
+    action_dim=2,
+    goal_dim=2,
+    max_env_steps=10,
+  )
+  her_params = AttrDict(
+    fut=0.8,
+    act=0,
+    ach=0,
+    beh=0,
+  )
+  def reward_fn(ag, dg, info):
+    return np.sum(np.square(ag - dg), -1)
+  buffer = HERBuffer(replay_size=10, future_warm_up=4,
+                     env_params=env_params, her_params=her_params, reward_fn=reward_fn, device='cpu')
+  for i in range(15):
+    exp=AttrDict(
+      done = [(i+1)%5==0], 
+      trajectory_over = [(i+1)%5==0], 
+      state = {
+        'observation': np.ones((1,2))*i,
+        'achieved_goal': np.ones((1,2))*i,
+        'desired_goal': np.ones((1,2))*i,
+      }, 
+      reward = np.ones((1))*i,
+      action = np.ones((1,2))*i,
+      next_state = {
+        'observation': np.ones((1,2))*i + 1,
+        'achieved_goal': np.ones((1,2))*i + 1,
+        'desired_goal': np.ones((1,2))*i + 1,
+      }, 
+    )
+    buffer.add(exp)

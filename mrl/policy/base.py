@@ -16,19 +16,19 @@ class BasePolicy(ABC, nn.Module):
     self.optimize_times = 0
 
   def update(self, sample_size, buffer):  # TODO ignore warmup
-    states, actions, rewards, next_states, gammas = buffer.sample(
+    states, actions, rewards, next_states, masks= buffer.sample(
       sample_size, to_torch=False)
-    if not self.normalizer is None:
+    if self.normalizer is not None:
       states = self.normalizer(states, update=False).astype(np.float32)
       next_states = self.normalizer(
         next_states, update=False).astype(np.float32)
-    states, actions, rewards, next_states, gammas = (self.torch(states), self.torch(actions),
+    states, actions, rewards, next_states, masks = (self.torch(states), self.torch(actions),
                                                      self.torch(rewards), self.torch(
                                                        next_states),
-                                                     self.torch(gammas))
-    result = self.learn(states, actions, rewards, next_states, gammas)
+                                                     self.torch(masks))
+    result = self.learn(states, actions, rewards, next_states, masks)
     self.optimize_times += 1
-    if not self.logger is None:
+    if self.logger is not None:
       self.logger.log({
         **result,
         'Train/Optimize Times': self.optimize_times
@@ -43,7 +43,7 @@ class BasePolicy(ABC, nn.Module):
     return x.cpu().detach().numpy()
 
   @abstractmethod
-  def learn(self, states, actions, rewards, next_states, gammas):
+  def learn(self, states, actions, rewards, next_states, masks):
     pass
 
   @abstractmethod

@@ -105,12 +105,7 @@ def main(args):
     config.double_q = True
     config.random_action_prob = LinearSchedule(1.0, config.eexplore, 1e5)
   else:
-    raise NotImplementedErro# Sparse-RL
-
-## Exploration Tricks
-
-1. change goal during one exploration according to Q, past ag, learned entropy model.
-2. change reward during the r
+    raise NotImplementedError
 
   # 6. Setup / add the environments and networks (which depend on the environment) to the config
   env, eval_env = make_env(args)

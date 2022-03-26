@@ -62,12 +62,12 @@ class DDPGPolicy(BasePolicy):
 
     return np.clip(action, -action_scale, action_scale)
 
-  def learn(self, states, actions, rewards, next_states, gammas):
+  def learn(self, states, actions, rewards, next_states, masks):
     with torch.no_grad():
       q_next = self.critic_target(
         next_states, self.actor_target(next_states))
 
-    target = (rewards + gammas * q_next)
+    target = (rewards + self.config.gamma * masks * q_next)
     target = torch.clamp(target, *self.config.clip_target_range)
 
     q = self.critic(states, actions)

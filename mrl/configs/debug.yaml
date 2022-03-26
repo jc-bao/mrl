@@ -3,7 +3,11 @@ epoch_len: 10
 num_envs: 1
 num_eval_envs: 1
 seed: 0
-her: 'future_4'  # TODO study the replay strategy
+her_params: 
+  fut: 0.8
+  act: 0
+  ach: 0
+  beh: 0
 optimize_every: 2
 grad_norm_clipping: -1
 grad_value_clipping: -1
@@ -46,5 +50,13 @@ goal_dim: 3
 num_goals: 1
 max_env_steps: 50
 never_done: True
+env_params:
+  num_envs: 1
+  max_action: 1
+  action_dim: 8
+  state_dim: 26
+  goal_dim: 3
+  num_goals: 1
+  max_env_steps: 50 
 # wandb
 wandb: False
