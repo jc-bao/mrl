@@ -1,18 +1,18 @@
-import gym
 # TODO fix shared memory buffer
-from mrl.data.buffer.base import BaseBuffer
+from xml.dom.minidom import Attr
+from mrl.data.buffer.base import BaseBuffer, RingBuffer, BufferManager
 import numpy as np
 import torch
+from attrdict import AttrDict
 
-from mrl.utils.misc import batch_block_diag
+from mrl.replays.core.shared_buffer import achieved_samples
 
 
 class HERBuffer():
 
   def __init__(
       self,
-      config,
-      env  # TODO remove it
+      config: AttrDict,
   ):
     """
     Buffer that does online hindsight relabeling.
@@ -20,193 +20,158 @@ class HERBuffer():
     """
     self.config = config
     self.size = self.config.replay_size
-    if type(env.observation_space) == gym.spaces.Dict:
-      observation_space = env.observation_space.spaces["observation"]
-      self.goal_space = env.observation_space.spaces["desired_goal"]
-    else:
-      observation_space = env.observation_space
+    self.max_env_steps = config.max_env_steps
+    self.future_warm_up = self.config.future_warm_up
+    # TODO manage sub buffers directly from here
+    self.basic_item_shapes = AttrDict(
+      state=(config.state_dim, np.float32),
+      action=(config.action_dim, np.float32),
+      next_state=(config.state_dim, np.float32),
+      reward=(1, np.float32),
+      done=(1, np.bool8),
+      previous_ag=(config.goal_dim, np.float32),
+      ag=(config.goal_dim, np.float32),
+      bg=(config.goal_dim, np.float32),
+      dg=(config.goal_dim, np.float32),
+    )
+    self.extra_item_shapes = AttrDict(
+      tidx=(1, np.int32),
+      tleft=(1, np.int32),
+      success=(1, np.bool8)
+    )
 
-    items = [("state", observation_space.shape),
-             ("action", env.action_space.shape), ("reward", (1,)),
-             ("next_state", observation_space.shape), ("done", (1,))]
+    self.buffers = BufferManager(self.size, self.basic_item_shapes)
+    self.extra_info = BufferManager(self.size, self.extra_item_shapes)
 
-    if self.goal_space is not None:
-      items += [("previous_ag", self.goal_space.shape),  # for reward shaping
-                ("ag", self.goal_space.shape),  # achieved goal
-                # behavioral goal (i.e., intrinsic if curious agent)
-                ("bg", self.goal_space.shape),
-                ("dg", self.goal_space.shape)]  # desired goal (even if ignored behaviorally)
+    self.num_envs = self.config.num_envs
+    # TODO make reset smart
+    self._subbuffers = [BufferManager(
+      limit=self.max_env_steps, items_shape=self.basic_item_shapes) for _ in range(self.num_envs)]
 
-    self.buffer = BaseBuffer(self.size, items)
-    self._subbuffers = [[] for _ in range(self.config.num_envs)]
-    self.n_envs = self.config.num_envs
-
-    # HER mode can differ if demo or normal replay buffer
+    # HER mode can differ if demo or normal replay buffer TODO change to params, try random goals
     self.fut, self.act, self.ach, self.beh = parse_hindsight_mode(
       self.config.her)
 
+    self.current_trajectory = 0
+
   def add(self, exp):
-    # if getattr(self, 'logger'): # TODO add logger
-    #     self.logger.add_tabular('Replay buffer size', len(self.buffer))
     done = np.expand_dims(exp.done, 1)  # format for replay buffer
     reward = np.expand_dims(exp.reward, 1)  # format for replay buffer
     action = exp.action
-
-    if self.goal_space:
-      state = exp.state['observation']
-      next_state = exp.next_state['observation']
-      previous_achieved = exp.state['achieved_goal']
-      achieved = exp.next_state['achieved_goal']
-      desired = exp.state['desired_goal']
-      # if hasattr(self, 'ag_curiosity') and self.ag_curiosity.current_goals is not None:
-      #     behavioral = self.ag_curiosity.current_goals
-      #     # recompute online reward
-      #     reward = self.env.compute_reward(
-      #         achieved, behavioral, {'s': state, 'ns': next_state}).reshape(-1, 1)
-      # else: TODO add curiosity back
-      behavioral = desired
-      for i in range(self.n_envs):
-        self._subbuffers[i].append([
-          state[i], action[i], reward[i], next_state[i], done[i], previous_achieved[i], achieved[i],
-          behavioral[i], desired[i]
-        ])
-    else:
-      state = exp.state
-      next_state = exp.next_state
-      for i in range(self.n_envs):
-        self._subbuffers[i].append(
-          [state[i], action[i], reward[i], next_state[i], done[i]])
-
-    for i in range(self.n_envs):
+    # TODO change env protocal to make store more easy
+    transitions = []
+    for i in range(self.num_envs):
+      transitions.append(
+        AttrDict(
+          state=exp.state['observation'][i],
+          action=action[i],
+          reward=reward[i],
+          done=done[i],
+          next_state=exp.next_state['observation'][i],
+          previous_ag=exp.state['achieved_goal'][i],
+          ag=exp.next_state['achieved_goal'][i],
+          dg=exp.state['desired_goal'][i],
+          bg=exp.next_state['desired_goal'][i],
+        ))
+    if hasattr(self, 'ag_curiosity') and self.ag_curiosity.current_goals is not None:
+      raise NotImplementedError
+      # behavioral = self.ag_curiosity.current_goals
+      # # recompute online reward
+      # reward = self.env.compute_reward(
+      #   ag, behavioral, {'s': state, 'ns': next_state}).reshape(-1, 1)
+    else:  # TODO add curiosity back (move it to env)
+      for i in range(self.num_envs):
+        self._subbuffers[i].add(transitions[i])
+    for i in range(self.num_envs):
       if exp.trajectory_over[i]:
-        trajectory = [np.stack(a) for a in zip(*self._subbuffers[i])]
-        self.buffer.add_trajectory(*trajectory)
-        self._subbuffers[i] = []
+        items = self._subbuffers[i].get_all()
+        trajectory_len = len(items.reward)
+        self.buffers.append_batch(items)
+        extra_info = AttrDict(
+          tidx=np.ones((trajectory_len, 1), dtype=np.int32) *
+          self.current_trajectory,
+          tleft=np.arange(trajectory_len, dtype=np.int32)[::-1, np.newaxis],
+          # TODO to judge success smartly
+          success=np.ones((trajectory_len, 1), dtype=np.bool8) * \
+          np.any(np.isclose(items.reward, 0.))
+        )
+        self.extra_info.append_batch(extra_info)
+        self.current_trajectory += 1
+        self._subbuffers[i] = BufferManager(
+          limit=self.max_env_steps, items_shape=self.basic_item_shapes)
 
   def sample(self, batch_size, to_torch=True):
     if hasattr(self, 'prioritized_replay'):
       batch_idxs = self.prioritized_replay(batch_size)
     else:
-      batch_idxs = np.random.randint(self.buffer.size, size=batch_size)
+      batch_idxs = (np.random.randint(
+        len(self.buffers), size=batch_size))
 
-    if self.goal_space:
-      has_config_her = self.config.get('her')
-      if has_config_her:
-        if len(self.buffer) > self.config.future_warm_up: 
-          fut_batch_size, act_batch_size, ach_batch_size, beh_batch_size, real_batch_size = np.random.multinomial(
-            batch_size, [self.fut, self.act, self.ach, self.beh, 1.])
-        else:
-          fut_batch_size, act_batch_size, ach_batch_size, beh_batch_size, real_batch_size = batch_size, 0, 0, 0, 0
-
-        fut_idxs, act_idxs, ach_idxs, beh_idxs, real_idxs = np.array_split(batch_idxs,
-                                                                           np.cumsum([fut_batch_size, act_batch_size, ach_batch_size, beh_batch_size]))
-
-        # Sample the real batch (i.e., goals = behavioral goals)
-        states, actions, rewards, next_states, dones, previous_ags, ags, goals, _ =\
-          self.buffer.sample(real_batch_size, batch_idxs=real_idxs)
-
-        # Sample the future batch
-        states_fut, actions_fut, _, next_states_fut, dones_fut, previous_ags_fut, ags_fut, _, _, goals_fut =\
-          self.buffer.sample_future(
-            fut_batch_size, batch_idxs=fut_idxs)
-
-        # Sample the actual batch
-        states_act, actions_act, _, next_states_act, dones_act, previous_ags_act, ags_act, _, _, goals_act =\
-          self.buffer.sample_from_goal_buffer(
-            'dg', act_batch_size, batch_idxs=act_idxs)
-
-        # Sample the achieved batch
-        states_ach, actions_ach, _, next_states_ach, dones_ach, previous_ags_ach, ags_ach, _, _, goals_ach =\
-          self.buffer.sample_from_goal_buffer(
-            'ag', ach_batch_size, batch_idxs=ach_idxs)
-
-        # Sample the behavioral batch
-        states_beh, actions_beh, _, next_states_beh, dones_beh, previous_ags_beh, ags_beh, _, _, goals_beh =\
-          self.buffer.sample_from_goal_buffer(
-            'bg', beh_batch_size, batch_idxs=beh_idxs)
-
-        # Concatenate the five
-        states = np.concatenate(
-          [states, states_fut, states_act, states_ach, states_beh], 0)
-        actions = np.concatenate(
-          [actions, actions_fut, actions_act, actions_ach, actions_beh], 0)
-        ags = np.concatenate(
-          [ags, ags_fut, ags_act, ags_ach, ags_beh], 0)
-        goals = np.concatenate(
-          [goals, goals_fut, goals_act, goals_ach, goals_beh], 0)
-        next_states = np.concatenate(
-          [next_states, next_states_fut, next_states_act, next_states_ach, next_states_beh], 0)
-
-        # Recompute reward online
-        if hasattr(self, 'goal_reward'):
-          rewards = self.goal_reward(
-            ags, goals, {'s': states, 'ns': next_states}).reshape(-1, 1).astype(np.float32)
-        else:
-          rewards = self.config.compute_reward(
-            ags, goals, {'s': states, 'ns': next_states}).reshape(-1, 1).astype(np.float32)
-
-        if self.config.get('never_done'):
-          dones = np.zeros_like(rewards, dtype=np.float32)
-        elif self.config.get('first_visit_succ'):
-          dones = np.round(rewards + 1.)
-        else:
-          raise ValueError(
-            "Never done or first visit succ must be set in goal environments to use HER.")
-          dones = np.concatenate(
-            [dones, dones_fut, dones_act, dones_ach, dones_beh], 0)
-
-        if self.config.sparse_reward_shaping:
-          previous_ags = np.concatenate(
-            [previous_ags, previous_ags_fut, previous_ags_act, previous_ags_ach, previous_ags_beh], 0)
-          previous_phi = - \
-            np.linalg.norm(previous_ags - goals,
-                           axis=1, keepdims=True)
-          current_phi = - \
-            np.linalg.norm(ags - goals, axis=1, keepdims=True)
-          rewards_F = self.config.gamma * current_phi - previous_phi
-          rewards += self.config.sparse_reward_shaping * rewards_F
-
-      else:
-        # Uses the original desired goals
-        states, actions, rewards, next_states, dones, _, _, _, goals =\
-          self.buffer.sample(batch_size, batch_idxs=batch_idxs)
-
-      if self.config.slot_based_state:
-        # TODO: For now, we flatten according to config.slot_state_dims
-        I, J = self.config.slot_state_dims
-        states = np.concatenate((states[:, I, J], goals), -1)
-        next_states = np.concatenate((next_states[:, I, J], goals), -1)
-      else:
-        states = np.concatenate((states, goals), -1)
-        next_states = np.concatenate((next_states, goals), -1)
-      gammas = self.config.gamma * (1.-dones)
-
-    elif self.config.get('n_step_returns') and self.config.n_step_returns > 1:
-      states, actions, rewards, next_states, dones = self.buffer.sample_n_step_transitions(
-        batch_size, self.config.n_step_returns, self.config.gamma, batch_idxs=batch_idxs
-      )
-      gammas = self.config.gamma**self.config.n_step_returns * (1.-dones)
-
+    trans = self.buffers[batch_idxs]
+    trans = self.change_replay_goals(trans, batch_idxs)
+    # Recompute reward online
+    if hasattr(self, 'goal_reward'):
+      trans.reward = self.goal_reward(
+        trans.ag, trans.replay_goal, {'s': trans.state, 'ns': trans.next_state}).reshape(-1, 1).astype(np.float32)
     else:
-      states, actions, rewards, next_states, dones = self.buffer.sample(
-        batch_size, batch_idxs=batch_idxs)
-      gammas = self.config.gamma * (1.-dones)
+      trans.reward = self.config.compute_reward(trans.ag, trans.replay_goal, {'s': trans.state, 'ns': trans.next_state}).reshape(-1, 1).astype(np.float32)
 
+    trans.state = np.concatenate((trans.state, trans.replay_goal), -1)
+    trans.next_state = np.concatenate((trans.next_state, trans.replay_goal), -1)
+    gammas = self.config.gamma * (1.-trans.done)
+
+    # TODO move normalizer to buffer
     if hasattr(self, 'state_normalizer'):
-      states = self.state_normalizer(
-        states, update=False).astype(np.float32)
-      next_states = self.state_normalizer(
-        next_states, update=False).astype(np.float32)
+      trans.state = self.state_normalizer(
+        trans.state, update=False).astype(np.float32)
+      trans.next_states = self.state_normalizer(
+        trans.next_states, update=False).astype(np.float32)
 
+    # TODO make the buffer torch based
     if to_torch:
-      return (self.torch(states), self.torch(actions),
-              self.torch(rewards), self.torch(next_states),
+      return (self.torch(trans.state), self.torch(trans.action),
+              self.torch(trans.reward), self.torch(trans.next_state),
               self.torch(gammas))
     else:
-      return (states, actions, rewards, next_states, gammas)
+      return (trans.state, trans.action, trans.reward, trans.next_state, gammas)
+
+  def change_replay_goals(self, trans: AttrDict , batch_idxs: np.ndarray):
+    # get goal size
+    if len(self.buffers) > self.future_warm_up:
+      fut_batch_size, act_batch_size, ach_batch_size, beh_batch_size, real_batch_size = np.random.multinomial(
+        len(batch_idxs), [self.fut, self.act, self.ach, self.beh, 1.])
+    else:
+      fut_batch_size, act_batch_size, ach_batch_size, beh_batch_size, real_batch_size = len(batch_idxs), 0, 0, 0, 0
+
+    fut_local_idxs, act_local_idxs, ach_local_idxs , beh_local_idxs  = local_idxs = np.cumsum([fut_batch_size, act_batch_size, ach_batch_size, beh_batch_size])
+
+    # assign actual goals
+    trans.replay_goal = trans.bg    
+    
+    # sample future goals
+    if fut_batch_size > 0:
+      fut_idxs = batch_idxs[:fut_local_idxs]
+      tlefts = self.extra_info[fut_idxs].tleft.flatten()
+      future_achieved_idx = fut_idxs + np.round(np.random.uniform(size=len(fut_idxs)) * tlefts).astype(np.int32)
+      trans.replay_goal[:fut_local_idxs] = self.buffers.ag[future_achieved_idx]
+
+    # sample random desired(actual) goal goals
+    if act_batch_size > 0:
+      trans.replay_goal[fut_local_idxs:act_local_idxs] = self.buffers.dg[
+        np.random.randint(len(self.buffers), size=act_batch_size)]
+    # sample random achieved goals
+    if ach_batch_size > 0:
+      trans.replay_goal[act_local_idxs:ach_local_idxs] = self.buffers.ag[
+        np.random.randint(len(self.buffers), size=ach_batch_size)]
+    # sample random behavior goals
+    if beh_batch_size > 0:
+      trans.replay_goal[ach_local_idxs:beh_local_idxs] = self.buffers.bg[
+        np.random.randint(len(self.buffers), size=beh_batch_size)]
+
+    return trans
 
   def __len__(self):
-    return len(self.buffer)
+    return self.buffers.len
 
   def torch(self, x):
     if isinstance(x, torch.Tensor):

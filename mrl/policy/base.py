@@ -10,7 +10,7 @@ class BasePolicy(ABC, nn.Module):
     super().__init__()
     self.config = config
     self.normalizer = normalizer
-    if self.normalizer is None:
+    if self.normalizer is None: # TODO move it to the buffer (when store experience)
       logging.warn('Normalizer not Defined')
     self.logger = logger
     self.optimize_times = 0

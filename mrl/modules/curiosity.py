@@ -11,13 +11,24 @@ from collections import deque
 
 
 def generate_overshooting_goals(num_proposals, step_amount, direct_overshoots, base_goal):
+  """_summary_
+
+  Args:
+      num_proposals (_type_): number of alternative goals to generate
+      step_amount (_type_): difference between next ag and current ag 
+      direct_overshoots (_type_): use next state to replace the old goal
+        else, will use next ag + noise
+      base_goal (_type_): currrent ag 
+
+  Returns:
+      _type_: _description_
+  """
   base_proposals = np.array([base_goal, base_goal + step_amount])
   if direct_overshoots:
     return base_proposals
   additional_proposals = base_goal[None] + np.random.uniform(
       -1.5, 1.5, (num_proposals - 2, step_amount.shape[0])) * step_amount[None]
   return np.concatenate((base_proposals, additional_proposals), 0)
-
 
 class AchievedGoalCuriosity(mrl.Module):
   """
@@ -59,12 +70,14 @@ class AchievedGoalCuriosity(mrl.Module):
 
   def _manage_resets_and_success_behaviors(self, experience, close):
     """ Manage (1) end of trajectory, (2) early resets, (3) go explore and overshot goals 
+    Function: partial reset if success and propose new goal when goal reached. 
     Args:
       - experience: over means reach the time limit
       - close: if success  
     Return: 
-      - reset_idxs: indices of envs that need to be reset
-      - overshooting_idxs: indices of envs that need to be overshot
+      - reset_idxs: indices of envs that need to be reset (if reset after goal achieved)
+      - overshooting_idxs: indices of envs that need to be overshot (change the goal after goal achieved)
+      - overshooting_goals: new goals to be overshot
     """
     reset_idxs, overshooting_idxs, overshooting_proposals = [], [], []
 
@@ -89,7 +102,7 @@ class AchievedGoalCuriosity(mrl.Module):
     return reset_idxs, overshooting_idxs, np.array(overshooting_proposals)
 
   def _overshoot_goals(self, experience, overshooting_idxs, overshooting_proposals):
-    """_summary_
+    """replace the goal when the goal is achieved.
 
     Args:
         experience (_type_): _description_
@@ -157,7 +170,9 @@ class AchievedGoalCuriosity(mrl.Module):
 
       # compute the q-values of both the sampled achieved goals and the current goals
       states = np.tile(experience.reset_state['observation'][:, None, :], (1, self.num_sampled_ags, 1))
+      # relabeled state
       states = np.concatenate((states, sampled_ags), -1).reshape(self.num_sampled_ags * self.n_envs, -1)
+      # real state (state to excecute the action)
       states_curr = np.concatenate((experience.reset_state['observation'], self.current_goals), -1)
       states_cat = np.concatenate((states, states_curr), 0)
 
@@ -171,9 +186,11 @@ class AchievedGoalCuriosity(mrl.Module):
         if len(self.successes_deque) == 10:
           self.min_cutoff = max(self.min_min_cutoff, min(np.min(q_values), self.min_cutoff))
           intrinsic_success_percent = np.mean(self.successes_deque)
+          # cut off less data if success rate is high
           if intrinsic_success_percent >= self.config.cutoff_success_threshold[1]:
             self.cutoff = max(self.min_cutoff, self.cutoff - 1.)
             self.successes_deque.clear()
+          # cut off more data if success rate is low
           elif intrinsic_success_percent <= self.config.cutoff_success_threshold[0]:
             self.cutoff = max(min(self.config.initial_cutoff, self.cutoff + 1.), self.min_min_cutoff)
             self.successes_deque.clear()
@@ -209,7 +226,7 @@ class AchievedGoalCuriosity(mrl.Module):
 
       # replace goal always when first_visit_succ (relying on the dg_score_multiplier to dg focus), otherwise
       # we are going to transition into the dgs using the ag_kde_tophat
-      if hasattr(self, 'curiosity_alpha'):
+      if hasattr(self, 'curiosity_alpha'): # like replace ratio
         if self.use_qcutoff:
           replace_goal = np.logical_or((np.random.random((self.n_envs, 1)) > self.curiosity_alpha.alpha),
                                        curr_q < self.cutoff).astype(np.float32)

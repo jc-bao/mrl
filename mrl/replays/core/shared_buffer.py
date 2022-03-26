@@ -288,7 +288,7 @@ class SharedMemoryTrajectoryBuffer():
     for buf in BUFF.items:
       item = BUFF[buf].get_batch(batch_idxs)
       transition.append(item)
-
+    transition.goal = transition.dg
     return transition
 
   def sample_slices(self, batch_size, slice_size):

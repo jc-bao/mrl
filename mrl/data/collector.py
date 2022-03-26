@@ -1,14 +1,14 @@
 import numpy as np
 from copy import deepcopy
 from attrdict import AttrDict
-import wandb
 import torch
 
 
 class Collector:
-  def __init__(self, config, policy, env, buffer, logger=None) -> None:
+  def __init__(self, config, policy, env, eval_env, buffer, logger=None) -> None:
     self.policy = policy
     self.env = env
+    self.eval_env = eval_env
     self.buffer = buffer
     self.config = config
     self.logger = logger
@@ -24,7 +24,7 @@ class Collector:
 
     assert num_steps % self.config.num_envs == 0, 'Make sure per collect number matches env num'
     state = self.env.state
-    for j in range(num_steps // self.config.num_envs):
+    for _ in range(num_steps // self.config.num_envs):
       with torch.no_grad():
         action = self.policy(state)
       next_state, reward, done, info = self.env.step(action)
@@ -34,7 +34,7 @@ class Collector:
         self.env.reset(self.reset_idxs)
         for i in self.reset_idxs:
           done[i] = True
-          if not 'done_observation' in info[i]:
+          if 'done_observation' not in info[i]:
             if isinstance(next_state, np.ndarray):
               # CHECK what is done obs
               info[i].done_observation = next_state[i]
@@ -53,7 +53,7 @@ class Collector:
       self.rewards_per_env += rewards
       self.steps_per_env += 1
       if np.any(dones):
-        if not self.logger is None:
+        if self.logger is not None:
           self.logger.log(
             {
               'Train/Episode Rewards': np.array(self.rewards_per_env[dones]),
@@ -73,7 +73,7 @@ class Collector:
     is_successes = []
 
     for _ in range(num_epochs//self.config.num_envs):
-      state = self.env.reset()
+      state = self.eval_env.reset()
       dones = np.zeros((self.config.num_envs,))
       steps = np.zeros_like(dones)
       is_success = np.zeros_like(dones)
@@ -82,7 +82,7 @@ class Collector:
       while not np.all(dones):
         with torch.no_grad():
           action = self.policy(state)
-        state, reward, dones_, infos = self.env.step(action)
+        state, reward, dones_, infos = self.eval_env.step(action)
         for i, (rew, done, info) in enumerate(zip(reward, dones_, infos)):
           if dones[i]:
             continue
@@ -100,7 +100,7 @@ class Collector:
         episode_steps.append(step)
     # set back to train mode
     self.policy.train()
-    if not self.logger is None:
+    if self.logger is not None:
       self.logger.log(
         {
           'Test/Success': np.mean(is_successes),

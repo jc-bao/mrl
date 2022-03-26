@@ -1,1 +1,0 @@
-{"Train/Episode_rewards": -50.0, "Train/Episode_steps": 50.0, "_runtime": 121, "_timestamp": 1647583988, "_step": 200, "Test/Success": 0.0125, "Test/Episode_rewards": -49.425, "Test/Discounted_episode_rewards": -31.442641945698586, "Test/Episode_steps": 49.4375, "_wandb": {"runtime": 122}}
