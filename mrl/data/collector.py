@@ -22,7 +22,7 @@ class Collector:
     # set policy to train mode to add noise to exploration
     self.policy.train()
 
-    assert num_steps % self.config.num_envs == 0, 'Make sure per collect number matches env num'
+    assert num_steps % self.config.num_envs == 0, f'Make sure per collect number {num_steps} matches env num {self.config.num_envs}'
     state = self.env.state
     for _ in range(num_steps // self.config.num_envs):
       with torch.no_grad():

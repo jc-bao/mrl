@@ -3,18 +3,16 @@ import logging
 
 
 def offpolicy_trainer(config, policy, collector):
-	config.num_epoch = int(config.max_steps // config.epoch_len)
+	config.num_epoch = int(config.max_env_steps // config.epoch_len)
 	logging.debug('start warm up')
 	collector.collect(num_steps=config.warm_up)  # warm up
 	for epoch in range(config.num_epoch):  # TODO add tqdm
 		config.num_cycles = int(config.epoch_len//config.num_envs)
 		for cycle in tqdm(range(config.num_cycles)):
 			# collect
-			logging.debug(f'start collect {config.num_envs} steps')
 			collector.collect(num_steps=config.num_envs)
 			# train TODO optimize every to update per step
 			update_times = collector.env_steps//config.optimize_every - policy.optimize_times
-			logging.debug(f'start update {update_times} times')
 			for _ in range(update_times):
 				policy.update(config.batch_size, collector.buffer)
 		logging.debug(f'start evaluate {config.num_eval_epochs} epochs')
@@ -35,7 +33,7 @@ if __name__ == '__main__':
 	logging.basicConfig(level=logging.WARN)
 	logging.debug('finish import')
 
-	config = get_config('debug')
+	config = get_config('handover')
 	def make_env():
 		import gym
 		import panda_gym

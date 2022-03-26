@@ -1,6 +1,7 @@
-max_steps: 1000
-epoch_len: 100
+max_env_steps: 10000000
+epoch_len: 100000
 num_envs: 16
+num_eval_envs: 16
 seed: 0
 her: 'future_4'  # TODO study the replay strategy
 optimize_every: 20
@@ -8,14 +9,14 @@ grad_norm_clipping: -1
 grad_value_clipping: -1
 policy_opt_noise: 0
 # update
-num_eval_epochs: 10
+num_eval_epochs: 80
 # rl
 gamma: 0.98
 n_step_returns: 1
 # buffer
-replay_size: 2500
+replay_size: 2500000
 # update
-batch_size: 10
+batch_size: 1000
 actor_lr: !!float 1e-3
 critic_lr: !!float 1e-3
 target_network_update_freq: 10
@@ -28,10 +29,10 @@ device: 'cuda'
 clip_target_range: [-50, 0]
 action_l2_regularization: !!float 1e-2
 # explore
-warm_up: 4
+warm_up: 4096
 eexplore: 0.2
-initial_explore: 10
-future_warm_up: 25
+initial_explore: 10000
+future_warm_up: 25000
 varied_action_noise: False
 action_noise: 0.1
 # reward
